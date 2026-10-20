@@ -119,3 +119,23 @@ export interface ActivePowerUp {
   name: string;
   remainingSec: number;
 }
+
+export interface GameMapInfo {
+  id: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  available: boolean;
+  tag: string;
+  tagClass: 'available' | 'locked' | 'soon';
+  location: string;
+  difficulty: string;
+  era: string;
+  roomsCount: number;
+  description: string;
+  loreQuote: string;
+  rooms: string[];
+  features: string[];
+  wonderWeapon: string;
+  specialEnemy: string;
+}

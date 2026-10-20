@@ -257,4 +257,82 @@ export class SoundService {
     osc.start(now);
     osc.stop(now + 0.1);
   }
+
+  playMenuHover(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.035);
+
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.045);
+  }
+
+  playMenuClick(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Resonant metallic click
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(420, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.08);
+
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.09);
+  }
+
+  playMenuLaunch(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Deep war drum impact + ominous rising chord
+    const drum = ctx.createOscillator();
+    const drumGain = ctx.createGain();
+    drum.type = 'sine';
+    drum.frequency.setValueAtTime(95, now);
+    drum.frequency.exponentialRampToValueAtTime(32, now + 0.55);
+
+    drumGain.gain.setValueAtTime(0.5, now);
+    drumGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+    drum.connect(drumGain);
+    drumGain.connect(ctx.destination);
+    drum.start(now);
+    drum.stop(now + 0.65);
+
+    [220, 277.18, 329.63].forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f, now + 0.05);
+      gain.gain.setValueAtTime(0.001, now + 0.05);
+      gain.gain.linearRampToValueAtTime(0.1, now + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + 0.05);
+      osc.stop(now + 1.45);
+    });
+  }
 }
+

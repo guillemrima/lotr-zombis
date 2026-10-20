@@ -494,82 +494,436 @@
   }
 
   <!-- ===================================================================== -->
-  <!-- MEDIEVAL FANTASY START MENU                                           -->
+  <!-- MAIN MENU & BLACK OPS 3 STYLE MAP SELECTOR                            -->
   <!-- ===================================================================== -->
   @if (!gameStarted()) {
-    <div class="modal-backdrop">
-      <div class="medieval-modal">
-        <div class="modal-rune-crown">❖ MINAS DE MORIA ❖</div>
-        <h1>CÁMARA DE MAZARBUL</h1>
-        <p class="subtitle">Supervivencia por Rondas en Primera Persona (LOTR × CoD Zombies)</p>
+    <div class="cod-menu-screen" [class.bo3-mode]="currentMenuScreen() === 'map-select'">
+      <!-- Ambient Backdrop -->
+      <div class="cod-menu-backdrop"></div>
 
-        <div class="controls-list">
-          <div><strong>WASD + Shift</strong> <span>Moverse / Sprintar</span></div>
-          <div><strong>Click Izq (Mantener)</strong> <span>Disparo automático continuo</span></div>
-          <div><strong>Click Der (Mantener)</strong> <span>Apuntar con precisión (Tensar arco)</span></div>
-          <div><strong>R</strong> <span>Recargar carcaj / arma</span></div>
-          <div><strong>F</strong> <span>Comprar puertas, armas, ventajas o barricadas</span></div>
-          <div><strong>M / Tab</strong> <span>Ver Plano Táctico de Moria (5 Salas)</span></div>
-          <div><strong>Rueda Ratón / Q / 1 / 2</strong> <span>Cambiar de arma equipada</span></div>
-          <div><strong>ESC</strong> <span>Pausar y Ajustes</span></div>
-        </div>
-
-        <!-- Developer Settings: Custom Starting Round -->
-        <div class="dev-settings-box">
-          <div class="dev-header">⚙ AJUSTES DE DESARROLLADOR</div>
-          <div class="dev-row">
-            <span>Iniciar en Ronda:</span>
-            <div class="dev-round-stepper">
-              <button type="button" class="step-btn" (click)="adjustDevStartRound(-1)">−</button>
-              <input
-                type="number"
-                min="1"
-                max="99"
-                class="dev-round-input"
-                [value]="devStartRound()"
-                (input)="setDevStartRound($any($event.target).value)"
-              />
-              <button type="button" class="step-btn" (click)="adjustDevStartRound(1)">+</button>
-            </div>
-          </div>
-          <div class="dev-presets">
-            @for (preset of [1, 5, 10, 15, 20]; track preset) {
-              <button
-                type="button"
-                class="preset-chip"
-                [class.active]="devStartRound() === preset"
-                (click)="setDevStartRound(preset)"
-              >
-                Ronda {{ formatRound(preset) }}
-              </button>
-            }
-          </div>
-          @if (devStartRound() > 1) {
+      <!-- ================================================================= -->
+      <!-- SCREEN 1: MENÚ PRINCIPAL (CLEAN DARK FANTASY HERO MENU)           -->
+      <!-- ================================================================= -->
+      @if (currentMenuScreen() === 'main') {
+        <div class="main-lobby-screen">
+          <!-- Minimal Top-Right Audio Toggle -->
+          <div class="main-top-bar">
             <button
               type="button"
-              class="dev-bonus-toggle"
-              [class.enabled]="devBonusPoints()"
-              (click)="toggleDevBonusPoints()"
+              class="minimal-audio-btn"
+              (mouseenter)="playMenuHoverSound()"
+              (click)="toggleMute()"
             >
-              Puntos extra por ronda alta ({{ 500 + (devStartRound() - 1) * 1000 }} pts):
-              <strong>{{ devBonusPoints() ? 'SÍ' : 'NO (500 pts)' }}</strong>
+              <span>{{ sound.muted ? '🔇' : '🔊' }}</span>
+              <span>{{ sound.muted ? 'SILENCIADO' : 'SONIDO' }}</span>
             </button>
-          }
-          <button
-            type="button"
-            class="dev-bonus-toggle"
-            [class.enabled]="devFreeDoors()"
-            (click)="toggleDevFreeDoors()"
-          >
-            Abrir las 5 salas desde el inicio:
-            <strong>{{ devFreeDoors() ? 'SÍ (Todas Abiertas)' : 'NO (Progresión Normal)' }}</strong>
-          </button>
-        </div>
+          </div>
 
-        <button class="medieval-btn primary" (click)="startGame()">
-          ⚔ INICIAR EN RONDA {{ formatRound(devStartRound()) }} ⚔
-        </button>
-      </div>
+          <!-- Left Hero Title & Clean Vertical Menu -->
+          <div class="main-hero-column">
+            <div class="brand-lockup">
+              <div class="brand-kicker">❖ THE MINES OF MORIA ❖</div>
+              <h1 class="brand-main font-lotr">KHAZAD-DÛM</h1>
+              <div class="brand-zombies">ZOMBIES</div>
+              <div class="brand-divider"></div>
+            </div>
+
+            <nav class="main-nav-list">
+              <button
+                type="button"
+                class="main-nav-item primary"
+                (mouseenter)="playMenuHoverSound()"
+                (click)="startGame()"
+              >
+                <span class="nav-indicator"></span>
+                <span class="nav-label">JUGAR PARTIDA</span>
+              </button>
+
+              <button
+                type="button"
+                class="main-nav-item"
+                (mouseenter)="playMenuHoverSound()"
+                (click)="openMenuScreen('map-select')"
+              >
+                <span class="nav-indicator"></span>
+                <span class="nav-label">MAPAS</span>
+              </button>
+
+              <button
+                type="button"
+                class="main-nav-item"
+                (mouseenter)="playMenuHoverSound()"
+                (click)="openMenuScreen('guide')"
+              >
+                <span class="nav-indicator"></span>
+                <span class="nav-label">GUÍA</span>
+              </button>
+
+              <button
+                type="button"
+                class="main-nav-item"
+                (mouseenter)="playMenuHoverSound()"
+                (click)="openMenuScreen('settings')"
+              >
+                <span class="nav-indicator"></span>
+                <span class="nav-label">AJUSTES</span>
+              </button>
+            </nav>
+          </div>
+        </div>
+      }
+
+      <!-- ================================================================= -->
+      <!-- SCREEN 2: SELECTOR DE MAPAS (BLACK OPS 3 ZOMBIES STYLE)           -->
+      <!-- ================================================================= -->
+      @if (currentMenuScreen() === 'map-select') {
+        <div class="bo3-maps-screen">
+          <!-- Top Header: Metallic Bars + "MAPS" -->
+          <header class="bo3-header">
+            <div class="bo3-header-left">
+              <div class="bo3-metal-bars">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <h1 class="bo3-header-title">MAPS</h1>
+            </div>
+          </header>
+
+          <!-- Main 2-Column Content: Left Map List + Right Artwork & Mission Briefing -->
+          <div class="bo3-content">
+            <!-- Left Column: Vertical Map List -->
+            <div class="bo3-list-wrapper">
+              <div class="bo3-map-list">
+                @for (map of availableMaps; track map.id) {
+                  <button
+                    type="button"
+                    class="bo3-map-item"
+                    [class.active]="selectedMapId() === map.id"
+                    [class.locked]="!map.available"
+                    (mouseenter)="hoverMap(map)"
+                    (click)="selectMap(map)"
+                  >
+                    <span class="bo3-rail-dot"></span>
+                    <span class="bo3-map-name">{{ map.title }}</span>
+                    @if (!map.available) {
+                      <span class="bo3-lock-icon">🔒</span>
+                    }
+                  </button>
+                }
+              </div>
+
+              <!-- List Counter (e.g. ▼ 1 / 3 ▲) -->
+              <div class="bo3-list-counter">
+                <button
+                  type="button"
+                  class="counter-arrow down"
+                  (click)="cycleMap(1)"
+                  aria-label="Siguiente mapa"
+                >
+                  ▼
+                </button>
+                <span class="counter-text">
+                  {{ selectedMapIndex() + 1 }} / {{ availableMaps.length }}
+                </span>
+                <button
+                  type="button"
+                  class="counter-arrow up"
+                  (click)="cycleMap(-1)"
+                  aria-label="Mapa anterior"
+                >
+                  ▲
+                </button>
+              </div>
+            </div>
+
+            <!-- Right Column: Large Map Image + Plaque + Mission Briefing -->
+            @if (selectedMap(); as map) {
+              <div class="bo3-preview-wrapper">
+                <!-- Technical Frame Ticks -->
+                <div class="bo3-frame-ticks"></div>
+
+                <!-- 16:9 Map Artwork Container -->
+                <div
+                  class="bo3-artwork-box"
+                  [class.playable]="map.available"
+                  (click)="map.available && startGame()"
+                >
+                  @if (map.image) {
+                    <img [src]="map.image" [alt]="map.title" class="bo3-artwork-img" />
+                  } @else {
+                    <div class="bo3-artwork-locked">
+                      <span class="locked-emblem">🔒</span>
+                      <span class="locked-tag">{{ map.tag }}</span>
+                    </div>
+                  }
+
+                  <div class="bo3-artwork-vignette"></div>
+
+                  <!-- Bottom-Left Silver Label Plaque (Just like "Revelations" in BO3) -->
+                  <div class="bo3-map-plaque">
+                    <span>{{ map.title }}</span>
+                  </div>
+                </div>
+
+                <!-- Mission Briefing Below Image -->
+                <div class="bo3-briefing">
+                  <div class="bo3-briefing-ticks">
+                    <span>=</span>
+                    <span>=</span>
+                  </div>
+                  <h2 class="bo3-briefing-title">MISSION BRIEFING</h2>
+                  <p class="bo3-briefing-desc">{{ map.description }}</p>
+                </div>
+              </div>
+            }
+          </div>
+
+          <!-- Bottom-Left Prompts Bar: (A) Select  (B) Back -->
+          <footer class="bo3-footer">
+            <button
+              type="button"
+              class="bo3-prompt-btn"
+              [disabled]="!selectedMap().available"
+              (click)="startGame()"
+            >
+              <span class="bo3-key-badge select">A</span>
+              <span>Seleccionar</span>
+            </button>
+
+            <button
+              type="button"
+              class="bo3-prompt-btn"
+              (click)="openMenuScreen('main')"
+            >
+              <span class="bo3-key-badge back">B</span>
+              <span>Volver</span>
+            </button>
+          </footer>
+        </div>
+      }
+
+      <!-- ================================================================= -->
+      <!-- SCREEN 3: GUÍA DE SUPERVIVENCIA                                   -->
+      <!-- ================================================================= -->
+      @if (currentMenuScreen() === 'guide') {
+        <div class="subscreen-container">
+          <header class="bo3-header">
+            <div class="bo3-header-left">
+              <div class="bo3-metal-bars">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <h1 class="bo3-header-title">GUÍA</h1>
+            </div>
+          </header>
+
+          <div class="guide-view-container">
+            <div class="guide-grid">
+              <!-- Controls card -->
+              <div class="guide-card">
+                <div class="guide-card-header">
+                  <span class="guide-icon">🎮</span>
+                  <h3>CONTROLES</h3>
+                </div>
+                <div class="controls-list-compact">
+                  <div class="ctrl-row"><kbd>WASD</kbd> <span>Moverse</span></div>
+                  <div class="ctrl-row"><kbd>Shift</kbd> <span>Sprint</span></div>
+                  <div class="ctrl-row"><kbd>Click Izq</kbd> <span>Disparar</span></div>
+                  <div class="ctrl-row"><kbd>Click Der</kbd> <span>Apuntar</span></div>
+                  <div class="ctrl-row"><kbd>R</kbd> <span>Recargar</span></div>
+                  <div class="ctrl-row"><kbd>F</kbd> <span>Interactuar / Reparar</span></div>
+                  <div class="ctrl-row"><kbd>M / Tab</kbd> <span>Plano Táctico</span></div>
+                  <div class="ctrl-row"><kbd>1 / 2 / Q</kbd> <span>Cambiar arma</span></div>
+                  <div class="ctrl-row"><kbd>ESC</kbd> <span>Pausa</span></div>
+                </div>
+              </div>
+
+              <!-- Perks card -->
+              <div class="guide-card">
+                <div class="guide-card-header">
+                  <span class="guide-icon">🏺</span>
+                  <h3>VENTAJAS (PERKS)</h3>
+                </div>
+                <div class="perks-guide-list">
+                  <div class="perk-info-item">
+                    <span class="perk-tag jugg">JUGGERNOG</span>
+                    <strong>Hidromiel de Beorn (2000 pts)</strong>
+                    <span>Salud máxima a 250 HP.</span>
+                  </div>
+                  <div class="perk-info-item">
+                    <span class="perk-tag speed">SPEED COLA</span>
+                    <strong>Pan de Lembas (1500 pts)</strong>
+                    <span>+50% velocidad de recarga y reparación.</span>
+                  </div>
+                  <div class="perk-info-item">
+                    <span class="perk-tag dbl">DOUBLE TAP</span>
+                    <strong>Cerveza de la Comarca (1800 pts)</strong>
+                    <span>+35% daño y mayor cadencia.</span>
+                  </div>
+                  <div class="perk-info-item">
+                    <span class="perk-tag stam">STAMIN-UP</span>
+                    <strong>Luz de Eärendil (1500 pts)</strong>
+                    <span>+25% velocidad de movimiento.</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Pack-a-Punch & Mystery Box -->
+              <div class="guide-card">
+                <div class="guide-card-header">
+                  <span class="guide-icon">⚡</span>
+                  <h3>ALTARES Y FORJA</h3>
+                </div>
+                <div class="features-guide-list">
+                  <div class="feature-item">
+                    <strong>Forja de Celebrimbor (3000 pts)</strong>
+                    <span>Pack-a-Punch: multiplica el daño, amplía el cargador y añade proyectiles de plasma.</span>
+                  </div>
+                  <div class="feature-item">
+                    <strong>Cofre Misterioso (950 pts)</strong>
+                    <span>Otorga un arma aleatoria del arsenal de la Tierra Media.</span>
+                  </div>
+                  <div class="feature-item">
+                    <strong>Barricadas</strong>
+                    <span>Mantén <kbd>F</kbd> en ventanas dañadas para reconstruir tablones y ganar puntos.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="bo3-footer">
+            <button
+              type="button"
+              class="bo3-prompt-btn"
+              (click)="openMenuScreen('main')"
+            >
+              <span class="bo3-key-badge back">B</span>
+              <span>Volver</span>
+            </button>
+          </footer>
+        </div>
+      }
+
+      <!-- ================================================================= -->
+      <!-- SCREEN 4: AJUSTES                                                 -->
+      <!-- ================================================================= -->
+      @if (currentMenuScreen() === 'settings') {
+        <div class="subscreen-container">
+          <header class="bo3-header">
+            <div class="bo3-header-left">
+              <div class="bo3-metal-bars">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <h1 class="bo3-header-title">AJUSTES</h1>
+            </div>
+          </header>
+
+          <div class="settings-view-container">
+            <div class="settings-card">
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <strong>Audio del Juego</strong>
+                    <span>Efectos de sonido y ambiente</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="preset-chip"
+                    [class.active]="!sound.muted"
+                    (click)="toggleMute()"
+                  >
+                    {{ sound.muted ? 'SILENCIADO' : 'ACTIVO' }}
+                  </button>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <strong>Ronda Inicial</strong>
+                    <span>Ronda en la que comienzan las partidas</span>
+                  </div>
+                  <div class="dev-round-stepper">
+                    <button type="button" class="step-btn" (click)="adjustDevStartRound(-1)">−</button>
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      class="dev-round-input"
+                      [value]="devStartRound()"
+                      (input)="setDevStartRound($any($event.target).value)"
+                    />
+                    <button type="button" class="step-btn" (click)="adjustDevStartRound(1)">+</button>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <strong>Selección Rápida de Ronda</strong>
+                    <span>Saltar directamente a una ronda específica</span>
+                  </div>
+                  <div class="dev-presets">
+                    @for (preset of [1, 5, 10, 15, 20]; track preset) {
+                      <button
+                        type="button"
+                        class="preset-chip"
+                        [class.active]="devStartRound() === preset"
+                        (click)="setDevStartRound(preset)"
+                      >
+                        {{ formatRound(preset) }}
+                      </button>
+                    }
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <strong>Puntos Extra en Rondas Altas</strong>
+                    <span>Otorga +1000 pts por cada ronda inicial superior a I</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="preset-chip"
+                    [class.active]="devBonusPoints()"
+                    (click)="toggleDevBonusPoints()"
+                  >
+                    {{ devBonusPoints() ? 'SÍ' : 'NO' }}
+                  </button>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <strong>Abrir Todas las Salas al Iniciar</strong>
+                    <span>Desbloquea las 5 salas de Moria desde el principio</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="preset-chip"
+                    [class.active]="devFreeDoors()"
+                    (click)="toggleDevFreeDoors()"
+                  >
+                    {{ devFreeDoors() ? 'SÍ' : 'NO' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="bo3-footer">
+            <button
+              type="button"
+              class="bo3-prompt-btn"
+              (click)="openMenuScreen('main')"
+            >
+              <span class="bo3-key-badge back">B</span>
+              <span>Volver</span>
+            </button>
+          </footer>
+        </div>
+      }
     </div>
   }
 
@@ -652,6 +1006,9 @@
           <button class="medieval-btn" (click)="startGame()">
             Reiniciar en Ronda {{ formatRound(devStartRound()) }}
           </button>
+          <button class="medieval-btn danger" (click)="quitToMainMenu()">
+            🚪 Abandonar al Menú Principal
+          </button>
         </div>
       </div>
     </div>
@@ -686,9 +1043,14 @@
           </div>
         </div>
 
-        <button class="medieval-btn primary" (click)="startGame()">
-          ⚔ VOLVER A LUCHAR (RONDA {{ formatRound(devStartRound()) }}) ⚔
-        </button>
+        <div class="btn-group">
+          <button class="medieval-btn primary" (click)="startGame()">
+            ⚔ VOLVER A LUCHAR (RONDA {{ formatRound(devStartRound()) }}) ⚔
+          </button>
+          <button class="medieval-btn" (click)="quitToMainMenu()">
+            🚪 Volver al Menú Principal
+          </button>
+        </div>
       </div>
     </div>
   }

@@ -18,6 +18,7 @@ import {
   EnemyEntity,
   EnemyType,
   FloatingPointPopup,
+  GameMapInfo,
   InteractableItem,
   PerkId,
   PerkInfo,
@@ -76,6 +77,117 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   readonly gameStarted = signal(false);
   readonly isPaused = signal(false);
   readonly isGameOver = signal(false);
+
+  // Main Menu & Map Selector State
+  readonly currentMenuScreen = signal<'main' | 'map-select' | 'settings' | 'guide'>('main');
+  readonly selectedMapId = signal<string>('khazad_dum');
+
+  readonly availableMaps: GameMapInfo[] = [
+    {
+      id: 'khazad_dum',
+      title: 'KHAZAD-DÛM',
+      subtitle: 'The Mines of Moria',
+      image: 'assets/maps/khazad-dum.jpg',
+      available: true,
+      tag: 'DISPONIBLE',
+      tagClass: 'available',
+      location: 'Montañas Nubladas, Moria',
+      difficulty: 'Pesadilla (Clásica)',
+      era: 'Tercera Edad del Sol',
+      roomsCount: 5,
+      description:
+        'En las profundidades del reino enano de Moria, una expedición fuera de su época despierta un mal ancestral. Defiende la tumba de Balin, reactiva las forjas misteriosas y sobrevive al despertar de la sombra y la llama.',
+      loreQuote:
+        '«Cavaron con demasiada codicia y demasiado profundo. Y despertaron aquello que yacía en las sombras...»',
+      rooms: [
+        'Sala I: Cámara de Mazarbul (Tumba de Balin)',
+        'Sala II: Galería de las Mil Columnas',
+        'Sala III: Gran Salón del Trono de Durin',
+        'Sala IV: El Puente de Khazad-dûm',
+        'Sala V: El Pozo de la Sombra y el Fuego'
+      ],
+      features: [
+        '5 Zonas interconectadas con puertas desbloqueables',
+        'Forja de Mithril (Pack-a-Punch: x2.5 daño y proyectiles de choque)',
+        'Cofre Misterioso de Durin (Armas legendarias por 950 pts)',
+        '4 Máquinas de Ventajas élficas y enanas',
+        'Barricadas de madera reparables en ventanas (Mantener F)',
+        'Aparición del Balrog con latigazo ígneo y rugido del abismo'
+      ],
+      wonderWeapon: 'Bastón de Anor / Trueno de Durin',
+      specialEnemy: 'El Balrog de Morgoth'
+    },
+    {
+      id: 'isengard',
+      title: 'ORTHANC',
+      subtitle: 'The Forges of Isengard',
+      image: '',
+      available: false,
+      tag: 'PRÓXIMAMENTE',
+      tagClass: 'soon',
+      location: 'Valle de Nan Curunír, Isengard',
+      difficulty: 'Extrema',
+      era: 'Guerra del Anillo',
+      roomsCount: 4,
+      description:
+        'Bajo la aguja negra de Orthanc, los pozos de reproducción y maquinaria de vapor corrompida de Saruman hierven de abominaciones. Nuevas trampas de vapor tóxico y fuego te esperan.',
+      loreQuote:
+        '«Una nueva fuerza se alza. Su victoria está cerca. Esta noche la tierra se manchará con sangre.»',
+      rooms: [
+        'Nivel I: Patios y Foso Exterior',
+        'Nivel II: Calderas de Vapor y Fundición',
+        'Nivel III: Pozos de Cría Uruk-hai',
+        'Nivel IV: Cámara de los Palantíri'
+      ],
+      features: [
+        'Trampas de vapor a presión y fuego valvulado',
+        'Cámaras de inundación de los Ents',
+        'Enemigos Berserkers con antorchas explosivas',
+        'Pack-a-Punch en la Fundición Central'
+      ],
+      wonderWeapon: 'Cañón de Pólvora de Saruman',
+      specialEnemy: 'Berserker Uruk-hai Explosivo'
+    },
+    {
+      id: 'helms_deep',
+      title: 'EL ABISMO DE HELM',
+      subtitle: 'The Hornburg Fortress',
+      image: '',
+      available: false,
+      tag: 'CLASIFICADO',
+      tagClass: 'locked',
+      location: 'Fortaleza de Cuernovilla, Rohan',
+      difficulty: 'Supervivencia Heroica',
+      era: 'Guerra del Anillo',
+      roomsCount: 3,
+      description:
+        'Muros de piedra milenarios resisten bajo una tormenta interminable y relámpagos cegadores. Defiende la brecha del desagüe y repliégate hacia el torreón final.',
+      loreQuote: '«¿Qué puede hacer el hombre contra un odio tan temerario?»',
+      rooms: [
+        'Sector I: El Gran Muro Bajo y Desagüe',
+        'Sector II: El Patio de Cuernovilla',
+        'Sector III: El Torreón y Salón del Trono'
+      ],
+      features: [
+        'Clima dinámico: Lluvia torrencial y rayos',
+        'Cuerdas de asedio y escaleras enemigas',
+        'El Cuerno de Helm para aturdir la horda',
+        'Línea de suministros defensivos'
+      ],
+      wonderWeapon: 'Hoja Reforjada de Andúril',
+      specialEnemy: 'Zapadores con Bombas de Pólvora'
+    }
+  ];
+
+  readonly selectedMap = computed(() => {
+    const id = this.selectedMapId();
+    return this.availableMaps.find((m) => m.id === id) || this.availableMaps[0];
+  });
+
+  readonly selectedMapIndex = computed(() => {
+    const idx = this.availableMaps.findIndex((m) => m.id === this.selectedMapId());
+    return idx >= 0 ? idx : 0;
+  });
 
   readonly round = signal(1);
   readonly devStartRound = signal(1);
@@ -363,7 +475,92 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  // ===========================================================================
+  // MAIN MENU & MAP NAVIGATION
+  // ===========================================================================
+  openMenuScreen(screen: 'main' | 'map-select' | 'settings' | 'guide'): void {
+    this.currentMenuScreen.set(screen);
+    this.sound.playMenuClick();
+  }
+
+  hoverMap(map: GameMapInfo): void {
+    if (this.selectedMapId() !== map.id) {
+      this.selectedMapId.set(map.id);
+    }
+    this.sound.playMenuHover();
+  }
+
+  selectMap(map: GameMapInfo): void {
+    this.selectedMapId.set(map.id);
+    if (map.available) {
+      this.startGame();
+    } else {
+      this.sound.playMenuClick();
+    }
+  }
+
+  cycleMap(delta: number): void {
+    const len = this.availableMaps.length;
+    if (len === 0) return;
+    const nextIdx = (this.selectedMapIndex() + delta + len) % len;
+    this.selectedMapId.set(this.availableMaps[nextIdx].id);
+    this.sound.playMenuHover();
+  }
+
+  playMenuHoverSound(): void {
+    this.sound.playMenuHover();
+  }
+
+  quitToMainMenu(): void {
+    if (document.pointerLockElement) {
+      document.exitPointerLock?.();
+    }
+    this.gameStarted.set(false);
+    this.isPaused.set(false);
+    this.isGameOver.set(false);
+    this.showTacticalMap.set(false);
+    this.cancelReload();
+    this.keys = {};
+    this.isMouseDown = false;
+    this.repairHoldTimer = 0;
+    this.repairProgress.set(0);
+
+    for (const enemy of this.enemies) {
+      this.scene.remove(enemy.mesh);
+    }
+    this.enemies = [];
+
+    for (const orb of this.powerUpOrbs) {
+      this.scene.remove(orb.mesh);
+    }
+    this.powerUpOrbs = [];
+
+    for (const proj of this.projectiles) {
+      this.scene.remove(proj.mesh);
+    }
+    this.projectiles = [];
+
+    for (const burst of this.impactBursts) {
+      this.scene.remove(burst.group);
+    }
+    this.impactBursts = [];
+
+    if (this.viewModelGroup) {
+      this.viewModelGroup.visible = false;
+    }
+
+    this.playerPos.set(0, 1.75, 6.2);
+    this.yaw = 0;
+    this.pitch = 0;
+    this.camera.position.set(0, 1.75, 6.2);
+    this.camera.rotation.set(0, 0, 0);
+
+    this.currentMenuScreen.set('main');
+    this.sound.playMenuClick();
+  }
+
   startGame(): void {
+    this.sound.playMenuLaunch();
     const initialRound = Math.max(1, Math.min(99, Math.floor(this.devStartRound() || 1)));
     this.devStartRound.set(initialRound);
 
@@ -371,6 +568,10 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.isGameOver.set(false);
     this.isPaused.set(false);
     this.showTacticalMap.set(false);
+
+    if (this.viewModelGroup) {
+      this.viewModelGroup.visible = true;
+    }
 
     this.cancelReload();
     this.keys = {};
@@ -635,6 +836,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
   private buildFirstPersonWeaponMesh(): void {
     this.viewModelGroup = new THREE.Group();
+    this.viewModelGroup.visible = false;
     this.camera.add(this.viewModelGroup);
     this.sceneHelper.populateWeaponViewModel(this.viewModelGroup, this.currentWeapon());
   }
@@ -850,7 +1052,26 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     const code = e.code;
     this.keys[code] = true;
 
-    if (!this.gameStarted() || this.isPaused() || this.isGameOver()) return;
+    if (!this.gameStarted()) {
+      if (e.repeat) return;
+      if (code === 'Escape' && this.currentMenuScreen() !== 'main') {
+        this.openMenuScreen('main');
+      } else if (this.currentMenuScreen() === 'map-select') {
+        if (code === 'ArrowDown' || code === 'KeyS') {
+          e.preventDefault();
+          this.cycleMap(1);
+        } else if (code === 'ArrowUp' || code === 'KeyW') {
+          e.preventDefault();
+          this.cycleMap(-1);
+        } else if (code === 'Enter' && this.selectedMap().available) {
+          e.preventDefault();
+          this.startGame();
+        }
+      }
+      return;
+    }
+
+    if (this.isPaused() || this.isGameOver()) return;
 
     if (code === 'Tab' || code === 'KeyM') {
       e.preventDefault();
@@ -1608,6 +1829,19 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     }
 
     this.animateEnvironment(dt, now);
+
+    if (!this.gameStarted()) {
+      // Atmospheric cinematic camera drift in Chamber of Mazarbul for Main Menu
+      const t = now * 0.0003;
+      this.yaw = Math.sin(t) * 0.12;
+      this.pitch = -0.04 + Math.cos(t * 0.7) * 0.03;
+      this.camera.position.x = Math.sin(t * 0.5) * 0.35;
+      this.camera.position.y = 1.75 + Math.sin(t * 0.4) * 0.05;
+      this.camera.position.z = 6.2 + Math.cos(t * 0.5) * 0.25;
+      this.camera.rotation.y = this.yaw;
+      this.camera.rotation.x = this.pitch;
+      this.camera.rotation.z = 0;
+    }
 
     if (this.gameStarted() && !this.isPaused() && !this.isGameOver()) {
       this.updateWeaponSwitch(dt);
