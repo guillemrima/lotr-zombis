@@ -26,7 +26,7 @@
   <!-- ===================================================================== -->
   @if (gameStarted()) {
     <div class="hud-layer">
-      <!-- Top-Left: Room & Floor Elevation Plaque + Tactical Blueprint Hint -->
+      <!-- Top-Left: Room & Floor Elevation Plaque + Tactical Blueprint Hint + Co-op Squad HUD -->
       <div class="hud-top-left">
         <div class="location-plaque">
           <div class="location-room">{{ currentRoomName() }}</div>
@@ -35,6 +35,41 @@
         <div class="map-key-hint" [class.active]="showTacticalMap()">
           <span>[M / Tab]</span> Plano Táctico de Moria
         </div>
+
+        <!-- Co-op LAN Squad Status Panel (Up to 3 Teammates) -->
+        @if (remotePlayersHud().length > 0) {
+          <div class="squad-hud-panel">
+            <div class="squad-hud-header">❖ COMPAÑÍA EN LAN ({{ remotePlayersHud().length + 1 }}/4)</div>
+            @for (ally of remotePlayersHud(); track ally.id) {
+              <div class="squad-ally-card" [class.downed]="ally.isDowned">
+                <div class="ally-top-row">
+                  <span class="ally-dot" [style.background]="ally.color"></span>
+                  <strong class="ally-name">{{ ally.name }}</strong>
+                  @if (ally.isHost) {
+                    <span class="ally-host-crown" title="Anfitrión (Host)">👑</span>
+                  }
+                  <span class="ally-points">⚜ {{ ally.points }}</span>
+                </div>
+                <div class="ally-bar-track">
+                  <div
+                    class="ally-bar-fill"
+                    [class.downed]="ally.isDowned"
+                    [style.width.%]="ally.isDowned ? 100 : (ally.health / ally.maxHealth) * 100"
+                    [style.background]="ally.isDowned ? '#ef4444' : ally.color"
+                  ></div>
+                </div>
+                <div class="ally-meta-row">
+                  @if (ally.isDowned) {
+                    <span class="ally-down-tag">⚠ ¡CAÍDO! ({{ ally.bleedoutTimer }}s) · [F] REVIVIR</span>
+                  } @else {
+                    <span>{{ ally.weaponName }}</span>
+                    <span class="ally-floor">{{ ally.floorLabel }}</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        }
       </div>
 
       <!-- Subtle Compact Telemetry Strip (Horde, Kills, Headshots & Active Power-Ups) -->
@@ -121,6 +156,29 @@
           [style.top.%]="pop.y"
         >
           +{{ pop.value }}
+        </div>
+      }
+
+      <!-- Co-op Downed / Bleedout Alert Banner -->
+      @if (isDowned()) {
+        <div class="downed-alert-banner">
+          <div class="downed-title">⚠ ¡ESTÁS HERIDO DE MUERTE! ⚠</div>
+          <div class="downed-sub">
+            Un compañero debe acercarse y mantener <strong>[F]</strong> para revivirte ({{ bleedoutRemainingSec() }}s)
+          </div>
+        </div>
+      }
+
+      <!-- Co-op Reviving Teammate Progress Plaque -->
+      @if (reviveTargetPlayer(); as revTarget) {
+        <div class="interact-plaque revive-plaque">
+          <div class="interact-title">➕ REVIVIR A {{ revTarget.name | uppercase }}</div>
+          <div class="interact-sub">Mantén [F] para levantar a tu compañero de la Compañía</div>
+          @if (reviveProgress() > 0) {
+            <div class="medieval-bar-track small">
+              <div class="medieval-bar-fill revive" [style.width.%]="reviveProgress()"></div>
+            </div>
+          }
         </div>
       }
 
@@ -447,6 +505,27 @@
                 <text x="0" y="74.1" class="icon-txt">PaP</text>
                 <rect x="-9.5" y="67" width="2.4" height="1.6" fill="#38bdf8" />
 
+                <!-- ================= LIVE TEAMMATE MARKERS (CO-OP LAN) ======================== -->
+                @for (mate of remotePlayersHud(); track mate.id) {
+                  <g [attr.transform]="'translate(' + mate.x + ',' + mate.z + ')'">
+                    <circle
+                      cx="0"
+                      cy="0"
+                      r="2.1"
+                      [attr.fill]="mate.isDowned ? 'rgba(239, 68, 68, 0.35)' : 'rgba(56, 189, 248, 0.25)'"
+                    />
+                    <circle
+                      cx="0"
+                      cy="0"
+                      r="1.35"
+                      [attr.fill]="mate.isDowned ? '#ef4444' : mate.color"
+                      stroke="#090d16"
+                      stroke-width="0.4"
+                    />
+                    <text x="0" y="-2.2" class="icon-txt">{{ mate.name }}</text>
+                  </g>
+                }
+
                 <!-- ================= LIVE PLAYER MARKER ======================================= -->
                 <g [attr.transform]="'translate(' + playerMapX() + ',' + playerMapY() + ') rotate(' + playerMapRotDeg() + ')'">
                   <circle cx="0" cy="0" r="2.2" fill="rgba(250, 204, 21, 0.28)" />
@@ -571,10 +650,23 @@
                 type="button"
                 class="main-nav-item primary"
                 (mouseenter)="playMenuHoverSound()"
-                (click)="startGame()"
+                (click)="startSoloGame()"
               >
                 <span class="nav-indicator"></span>
-                <span class="nav-label">JUGAR PARTIDA</span>
+                <span class="nav-label">JUGAR PARTIDA (SOLO)</span>
+              </button>
+
+              <button
+                type="button"
+                class="main-nav-item coop"
+                (mouseenter)="playMenuHoverSound()"
+                (click)="openMultiplayerMenu()"
+              >
+                <span class="nav-indicator"></span>
+                <span class="nav-label">MULTIJUGADOR LAN (1–4)</span>
+                @if (mp.availableRooms().length > 0) {
+                  <span class="lan-rooms-badge">{{ mp.availableRooms().length }} SALA(S)</span>
+                }
               </button>
 
               <button
@@ -608,6 +700,296 @@
               </button>
             </nav>
           </div>
+        </div>
+      }
+
+      <!-- ================================================================= -->
+      <!-- SCREEN 1.5: SALA MULTIJUGADOR LAN (1 A 4 JUGADORES CO-OP)         -->
+      <!-- ================================================================= -->
+      @if (currentMenuScreen() === 'multiplayer') {
+        <div class="subscreen-container mp-lobby-screen">
+          <header class="bo3-header mp-header-row">
+            <div class="bo3-header-left">
+              <div class="bo3-metal-bars">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <h1 class="bo3-header-title">COMPAÑÍA EN RED LAN (1–4 JUGADORES)</h1>
+            </div>
+
+            <div class="mp-status-bar">
+              <div class="mp-net-pill" [class.connected]="mp.isConnected()">
+                <span class="net-dot"></span>
+                @if (mp.isConnected()) {
+                  <span>Servidor LAN Activo · IP Local: <strong>{{ mp.localLanIp() }}:{{ mp.wsPort() }}</strong></span>
+                } @else {
+                  <span>Modo Local / Buscando Servidor LAN (:4300)...</span>
+                }
+              </div>
+              <button type="button" class="mp-copy-btn" (click)="copyLanIpToClipboard()">
+                {{ copiedIpNotice() ? '✓ IP Copiada' : '📋 Copiar IP' }}
+              </button>
+            </div>
+          </header>
+
+          @if (mp.errorMessage()) {
+            <div class="mp-error-banner">
+              <span>⚠ {{ mp.errorMessage() }}</span>
+              <button type="button" (click)="mp.errorMessage.set(null)">✕</button>
+            </div>
+          }
+
+          <div class="mp-main-grid">
+            <!-- LEFT COLUMN: PLAYER IDENTITY & HERO SELECTION -->
+            <div class="mp-panel">
+              <div class="mp-panel-header">
+                <span>1. TU GUERRERO DE LA COMPAÑÍA</span>
+              </div>
+
+              <div class="mp-field-group">
+                <label class="mp-label">Nombre en la Red LAN</label>
+                <input
+                  type="text"
+                  maxlength="18"
+                  class="mp-text-input"
+                  [value]="mp.playerName()"
+                  (input)="mp.setPlayerName($any($event.target).value)"
+                  placeholder="Ej. Aragorn, Legolas..."
+                />
+              </div>
+
+              <label class="mp-label">Elige tu Aspecto 3D (Visible para tus aliados)</label>
+              <div class="hero-selector-grid">
+                @for (hero of mp.heroes; track hero.id) {
+                  <button
+                    type="button"
+                    class="hero-card"
+                    [class.selected]="mp.selectedHeroId() === hero.id"
+                    [style.borderColor]="mp.selectedHeroId() === hero.id ? hero.color : 'rgba(148,163,184,0.22)'"
+                    (click)="selectHero(hero.id)"
+                  >
+                    <span class="hero-color-badge" [style.background]="hero.color"></span>
+                    <div class="hero-card-info">
+                      <strong>{{ hero.name }}</strong>
+                      <span>{{ hero.title }}</span>
+                    </div>
+                  </button>
+                }
+              </div>
+
+              <div class="mp-howto-box">
+                <div class="howto-title">❖ ¿CÓMO JUGAR EN LAN CON HASTA 4 PERSONAS?</div>
+                <ol class="howto-list">
+                  <li>Cada jugador clona el repositorio y ejecuta <code>npm start</code>, o abre <code>http://{{ mp.localLanIp() }}:4200</code> en su navegador.</li>
+                  <li>El <strong>Anfitrión (Host)</strong> pulsa <strong>Crear Sala Abierta en LAN</strong>.</li>
+                  <li>Los demás jugadores verán la sala automáticamente en <strong>Salas Abiertas en LAN</strong> (o pueden escribir la IP del Host <code>{{ mp.localLanIp() }}</code>).</li>
+                </ol>
+              </div>
+            </div>
+
+            <!-- RIGHT COLUMN: OPEN LAN ROOMS OR ACTIVE WAITING ROOM -->
+            @if (!mp.currentRoom()) {
+              <div class="mp-panel">
+                <div class="mp-panel-header">
+                  <span>2. CREAR O UNIRSE A UNA SALA ABIERTA</span>
+                  <button type="button" class="mp-refresh-btn" (click)="mp.refreshRoomsList()">
+                    ↻ Buscar Salas
+                  </button>
+                </div>
+
+                <!-- HOST NEW ROOM BOX -->
+                <div class="mp-create-room-box">
+                  <div class="create-room-inputs">
+                    <input
+                      type="text"
+                      maxlength="28"
+                      class="mp-text-input"
+                      [value]="mp.customRoomName()"
+                      (input)="mp.customRoomName.set($any($event.target).value)"
+                      placeholder="Nombre de la sala (opcional)..."
+                    />
+                    <button type="button" class="mp-action-btn host" (click)="createLanHostRoom()">
+                      ⚔ CREAR SALA ABIERTA (HOST 1/4)
+                    </button>
+                  </div>
+                  <div class="create-room-meta">
+                    <span>Mapa: <strong>{{ selectedMap().title }}</strong></span>
+                    <span>·</span>
+                    <span>Ronda Inicial: <strong>{{ formatRound(devStartRound()) }}</strong></span>
+                    <span>·</span>
+                    <span>Puertas Abiertas: <strong>{{ devFreeDoors() ? 'SÍ' : 'NO' }}</strong></span>
+                  </div>
+                </div>
+
+                <!-- DISCOVERED LAN ROOMS LIST -->
+                <div class="mp-rooms-section">
+                  <div class="mp-sub-header">
+                    <span>SALAS ABIERTAS DETECTADAS EN TU RED LAN ({{ mp.availableRooms().length }})</span>
+                  </div>
+
+                  @if (mp.availableRooms().length === 0) {
+                    <div class="mp-empty-rooms">
+                      <div class="empty-Title">No se han detectado salas abiertas todavía</div>
+                      <p>Crea una sala arriba para ser el Host, o conéctate directamente a la IP de un compañero abajo.</p>
+                    </div>
+                  } @else {
+                    <div class="mp-rooms-list">
+                      @for (room of mp.availableRooms(); track room.id) {
+                        <div class="mp-room-row">
+                          <div class="room-row-info">
+                            <div class="room-row-title">
+                              <strong>{{ room.name }}</strong>
+                              <span class="room-status-tag" [class.playing]="room.state === 'playing'">
+                                {{ room.state === 'playing' ? 'EN COMBATE (UNIRSE)' : 'SALA ABIERTA' }}
+                              </span>
+                            </div>
+                            <div class="room-row-sub">
+                              <span>Host: <strong>{{ room.hostName }}</strong> ({{ room.hostIp }})</span>
+                              <span>·</span>
+                              <span>Ronda {{ formatRound(room.startRound) }}</span>
+                              <span>·</span>
+                              <span>Jugadores: <strong>{{ room.playerCount }} / {{ room.maxPlayers }}</strong></span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            class="mp-join-btn"
+                            [disabled]="room.playerCount >= room.maxPlayers"
+                            (click)="joinLanRoom(room)"
+                          >
+                            {{ room.playerCount >= room.maxPlayers ? 'LLENA (4/4)' : 'UNIRSE A SALA ▶' }}
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+
+                <!-- DIRECT IP CONNECTION (FALLBACK IF ROUTER BLOCKS UDP BROADCAST) -->
+                <div class="mp-direct-ip-box">
+                  <label class="mp-label">Conexión Directa por IP del Host (si tu Wi-Fi aísla broadcast UDP)</label>
+                  <div class="direct-ip-row">
+                    <input
+                      type="text"
+                      class="mp-text-input"
+                      [value]="mp.directHostIpInput()"
+                      (input)="mp.directHostIpInput.set($any($event.target).value)"
+                      placeholder="Ej. 192.168.1.45"
+                    />
+                    <button type="button" class="mp-action-btn secondary" (click)="joinLanByDirectIp()">
+                      🔗 Conectar a IP del Host
+                    </button>
+                  </div>
+                </div>
+              </div>
+            } @else {
+              <!-- ACTIVE WAITING ROOM (1 TO 4 PLAYERS IN ROOM) -->
+              @if (mp.currentRoom(); as room) {
+                <div class="mp-panel active-room-panel">
+                  <div class="mp-panel-header">
+                    <span>SALA ACTIVA: {{ room.name | uppercase }}</span>
+                    <span class="room-ip-badge">IP Host: {{ room.hostIp }}:{{ room.wsPort || 4300 }}</span>
+                  </div>
+
+                  <div class="fellowship-slots-grid">
+                    @for (slot of [0, 1, 2, 3]; track slot) {
+                      @if (room.players[slot]; as p) {
+                        <div class="fellowship-slot filled" [style.borderColor]="p.color">
+                          <div class="slot-badge" [style.background]="p.color">
+                            JUGADOR {{ slot + 1 }}
+                          </div>
+                          <div class="slot-player-name">
+                            <strong>{{ p.name }}</strong>
+                            @if (p.isHost) {
+                              <span class="host-crown">👑 HOST</span>
+                            }
+                            @if (p.id === mp.localPlayerId()) {
+                              <span class="you-tag">(TÚ)</span>
+                            }
+                          </div>
+                          <div class="slot-hero-name">
+                            {{ mp.getHeroPreset(p.heroId).name }} · {{ mp.getHeroPreset(p.heroId).title }}
+                          </div>
+                        </div>
+                      } @else {
+                        <div class="fellowship-slot empty">
+                          <div class="slot-badge empty">HUECO {{ slot + 1 }} / 4</div>
+                          <div class="slot-empty-text">Esperando jugador en LAN...</div>
+                          <div class="slot-empty-sub">Comparte la IP {{ room.hostIp }}</div>
+                        </div>
+                      }
+                    }
+                  </div>
+
+                  <!-- Room Match Configuration (Editable by Host) -->
+                  <div class="mp-room-config">
+                    <div class="config-pill">
+                      <span>Ronda Inicial:</span>
+                      @if (mp.isHost()) {
+                        <div class="mini-stepper">
+                          <button type="button" (click)="adjustDevStartRound(-1)">−</button>
+                          <strong>{{ formatRound(devStartRound()) }}</strong>
+                          <button type="button" (click)="adjustDevStartRound(1)">+</button>
+                        </div>
+                      } @else {
+                        <strong>{{ formatRound(room.startRound) }}</strong>
+                      }
+                    </div>
+
+                    <div class="config-pill">
+                      <span>5 Salas Abiertas:</span>
+                      @if (mp.isHost()) {
+                        <button type="button" class="mini-toggle" (click)="toggleDevFreeDoors()">
+                          {{ devFreeDoors() ? 'SÍ' : 'NO' }}
+                        </button>
+                      } @else {
+                        <strong>{{ room.freeDoors ? 'SÍ' : 'NO' }}</strong>
+                      }
+                    </div>
+
+                    <div class="config-pill">
+                      <span>IA de Horda:</span>
+                      <strong>Multijugador Inteligente ({{ room.playerCount }} Jug.)</strong>
+                    </div>
+                  </div>
+
+                  <div class="mp-room-actions">
+                    @if (mp.isHost()) {
+                      <button
+                        type="button"
+                        class="mp-launch-btn"
+                        (click)="launchMultiplayerMatchFromHost()"
+                      >
+                        ⚔ INICIAR BATALLA EN KHAZAD-DÛM ({{ room.playerCount }}/4 JUGADORES) ⚔
+                      </button>
+                    } @else {
+                      <div class="mp-waiting-host-box">
+                        <div class="loading-spinner-ring small"></div>
+                        <span>Esperando a que el Anfitrión (<strong>{{ room.hostName }}</strong>) inicie la partida...</span>
+                      </div>
+                    }
+
+                    <button type="button" class="mp-leave-btn" (click)="leaveLanLobby()">
+                      Salir de la Sala
+                    </button>
+                  </div>
+                </div>
+              }
+            }
+          </div>
+
+          <footer class="bo3-footer">
+            <button
+              type="button"
+              class="bo3-prompt-btn"
+              (click)="openMenuScreen('main')"
+            >
+              <span class="bo3-key-badge back">B</span>
+              <span>Volver al Menú Principal</span>
+            </button>
+          </footer>
         </div>
       }
 

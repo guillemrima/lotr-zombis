@@ -55,6 +55,15 @@ export interface EnemyEntity {
   walkCycle: number;
   hitFlashTimer: number;
   deathTimer: number;
+  // Multi-player intelligent targeting & smooth client interpolation
+  targetPlayerId?: string;
+  targetReevalTimer?: number;
+  aggroPlayerId?: string;
+  aggroTimer?: number;
+  netX?: number;
+  netY?: number;
+  netZ?: number;
+  netYaw?: number;
 }
 
 export interface BarricadeWindow {
@@ -139,4 +148,118 @@ export interface GameMapInfo {
   features: string[];
   wonderWeapon: string;
   specialEnemy: string;
+}
+
+// ===========================================================================
+// LAN MULTIPLAYER MODELS (UP TO 4 PLAYERS CO-OP)
+// ===========================================================================
+export type HeroId = 'legolas' | 'gimli' | 'gandalf' | 'aragorn';
+
+export interface HeroPreset {
+  id: HeroId;
+  name: string;
+  title: string;
+  color: string;
+  hexColor: number;
+  cloakColor: number;
+  armorColor: number;
+}
+
+export interface LanRoomPlayerInfo {
+  id: string;
+  name: string;
+  heroId: HeroId;
+  color: string;
+  isHost: boolean;
+  ready: boolean;
+  slotIndex: number;
+}
+
+export interface LanRoomSummary {
+  id: string;
+  name: string;
+  hostName: string;
+  hostIp: string;
+  wsPort: number;
+  mapId: string;
+  mapTitle: string;
+  startRound: number;
+  freeDoors: boolean;
+  bonusPoints: boolean;
+  state: 'lobby' | 'playing';
+  playerCount: number;
+  maxPlayers: number;
+  players: LanRoomPlayerInfo[];
+  isLocalHost?: boolean;
+}
+
+export interface RemotePlayerAvatarRig {
+  group: THREE.Group;
+  headGroup: THREE.Group;
+  bodyGroup: THREE.Group;
+  leftArm: THREE.Object3D;
+  rightArm: THREE.Object3D;
+  leftLeg: THREE.Object3D;
+  rightLeg: THREE.Object3D;
+  weaponGroup: THREE.Group;
+  hpBarFill: THREE.Mesh;
+  nameSprite: THREE.Sprite;
+  downedBeacon: THREE.Object3D;
+  displayedWeaponId: WeaponId;
+  displayedWeaponUpgraded: boolean;
+}
+
+export interface RemotePlayerState {
+  id: string;
+  name: string;
+  heroId: HeroId;
+  color: string;
+  slotIndex: number;
+  isHost: boolean;
+  x: number;
+  y: number;
+  z: number;
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+  yaw: number;
+  pitch: number;
+  targetYaw: number;
+  targetPitch: number;
+  health: number;
+  maxHealth: number;
+  points: number;
+  kills: number;
+  headshots: number;
+  weaponId: WeaponId;
+  weaponUpgraded: boolean;
+  weaponName: string;
+  isMoving: boolean;
+  isSprinting: boolean;
+  isAiming: boolean;
+  isDowned: boolean;
+  bleedoutTimer: number;
+  reviveProgress: number;
+  walkCycle: number;
+  attackRecoilTimer: number;
+  hitFlashTimer: number;
+  roomName: string;
+  floorLabel: string;
+  lastUpdateMs: number;
+  avatar?: RemotePlayerAvatarRig;
+}
+
+export interface NetworkEnemySnapshot {
+  id: number;
+  type: EnemyType;
+  hp: number;
+  maxHp: number;
+  speed: number;
+  state: 'approaching_window' | 'breaking_barrier' | 'chasing' | 'dead';
+  targetWindowId: number;
+  targetPlayerId?: string;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
 }

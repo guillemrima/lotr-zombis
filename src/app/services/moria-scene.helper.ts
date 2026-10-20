@@ -3,9 +3,12 @@ import {
   BarricadeWindow,
   DoorId,
   EnemyType,
+  HeroPreset,
   InteractableItem,
   PerkId,
   PerkInfo,
+  RemotePlayerAvatarRig,
+  RemotePlayerState,
   WeaponConfig,
   WeaponId
 } from '../models/game.models';
@@ -4098,4 +4101,477 @@ export class MoriaSceneHelper {
       );
     }
   }
+
+  // ===========================================================================
+  // SCULPTED 3D FELLOWSHIP HERO AVATAR FOR REAL-TIME LAN MULTIPLAYER
+  // ===========================================================================
+  buildRemotePlayerAvatar(hero: HeroPreset, playerName: string): RemotePlayerAvatarRig {
+    const group = new THREE.Group();
+
+    const cloakMat = new THREE.MeshStandardMaterial({
+      color: hero.cloakColor,
+      roughness: 0.72,
+      metalness: 0.12,
+      side: THREE.DoubleSide
+    });
+    const armorMat = new THREE.MeshStandardMaterial({
+      color: hero.armorColor,
+      roughness: 0.35,
+      metalness: 0.78
+    });
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: 0xe8be9e,
+      roughness: 0.55,
+      metalness: 0.05
+    });
+    const accentGlowMat = new THREE.MeshBasicMaterial({ color: hero.hexColor });
+
+    // 1. ARTICULATED LEGS
+    const buildLeg = (isLeft: boolean): THREE.Group => {
+      const legRoot = new THREE.Group();
+      const side = isLeft ? -1 : 1;
+      legRoot.position.set(side * 0.17, 0.84, 0);
+
+      const thigh = new THREE.Mesh(this.enemyThighGeo, cloakMat);
+      thigh.position.y = -0.21;
+      const knee = new THREE.Mesh(this.enemyKneeGeo, armorMat);
+      knee.position.y = -0.42;
+      const shin = new THREE.Mesh(this.enemyShinGeo, armorMat);
+      shin.position.y = -0.63;
+      const boot = new THREE.Mesh(this.enemyBootGeo, this.leatherMat);
+      boot.position.set(0, -0.8, -0.05);
+
+      legRoot.add(thigh, knee, shin, boot);
+      return legRoot;
+    };
+
+    const leftLeg = buildLeg(true);
+    const rightLeg = buildLeg(false);
+
+    // 2. ARMORED TORSO, CLOAK & QUIVER
+    const bodyGroup = new THREE.Group();
+    bodyGroup.position.set(0, 1.18, 0);
+
+    const torso = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.22, 0.58, 12),
+      armorMat
+    );
+    const belt = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.24, 0.24, 0.1, 12),
+      this.leatherMat
+    );
+    belt.position.y = -0.24;
+    const buckle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.11, 0.06),
+      this.goldMat
+    );
+    buckle.position.set(0, -0.24, -0.23);
+
+    // Heroic Cloak / Cape hanging down the back (+Z is back in local avatar space since -Z is forward)
+    const cape = new THREE.Mesh(
+      new THREE.BoxGeometry(0.52, 0.88, 0.04),
+      cloakMat
+    );
+    cape.position.set(0, -0.14, 0.23);
+    cape.rotation.x = 0.12;
+
+    // Shoulder Pauldrons with golden/hero trim
+    const pauldronL = new THREE.Mesh(this.enemyPauldronGeo, armorMat);
+    pauldronL.position.set(-0.33, 0.22, 0);
+    pauldronL.rotation.z = 0.35;
+    const pauldronR = new THREE.Mesh(this.enemyPauldronGeo, armorMat);
+    pauldronR.position.set(0.33, 0.22, 0);
+    pauldronR.rotation.z = -0.35;
+
+    // Chest Emblem / Star of the Fellowship
+    const chestCrest = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.065, 1),
+      accentGlowMat
+    );
+    chestCrest.position.set(0, 0.1, -0.26);
+
+    // Quiver on back
+    const quiver = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.065, 0.05, 0.52, 8),
+      this.leatherMat
+    );
+    quiver.position.set(0.12, 0.08, 0.26);
+    quiver.rotation.z = -0.28;
+
+    bodyGroup.add(torso, belt, buckle, cape, pauldronL, pauldronR, chestCrest, quiver);
+
+    // 3. SCULPTED HERO HEAD (Faces -Z forward so lookAt / yaw rotation matches camera)
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.68, 0);
+
+    const headMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.19, 14, 12),
+      skinMat
+    );
+
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const pupilMat = new THREE.MeshBasicMaterial({ color: hero.hexColor });
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), eyeMat);
+    eyeL.position.set(-0.068, 0.02, -0.165);
+    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), eyeMat);
+    eyeR.position.set(0.068, 0.02, -0.165);
+    const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 6), pupilMat);
+    pupilL.position.set(-0.068, 0.02, -0.182);
+    const pupilR = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 6), pupilMat);
+    pupilR.position.set(0.068, 0.02, -0.182);
+
+    headGroup.add(headMesh, eyeL, eyeR, pupilL, pupilR);
+
+    if (hero.id === 'gandalf') {
+      // Iconic Pointed Wizard Hat + Flowing Silver Beard
+      const brim = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.36, 0.38, 0.03, 16),
+        cloakMat
+      );
+      brim.position.y = 0.14;
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.21, 0.48, 12),
+        cloakMat
+      );
+      cone.position.set(0, 0.36, 0.03);
+      cone.rotation.x = -0.15;
+      const beard = new THREE.Mesh(
+        new THREE.ConeGeometry(0.15, 0.38, 8),
+        new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 })
+      );
+      beard.position.set(0, -0.2, -0.11);
+      beard.rotation.x = Math.PI;
+      headGroup.add(brim, cone, beard);
+    } else if (hero.id === 'gimli') {
+      // Dwarven Crested War Helm + Braided Red Beard
+      const helm = new THREE.Mesh(this.enemyHelmetGeo, this.goldMat);
+      helm.position.y = 0.03;
+      const crest = new THREE.Mesh(
+        new THREE.BoxGeometry(0.05, 0.14, 0.38),
+        armorMat
+      );
+      crest.position.set(0, 0.22, 0);
+      const beard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, 0.32, 0.14),
+        new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.75 })
+      );
+      beard.position.set(0, -0.18, -0.12);
+      headGroup.add(helm, crest, beard);
+    } else if (hero.id === 'legolas') {
+      // Elven Golden Circlet & Blonde Hair
+      const circlet = new THREE.Mesh(
+        new THREE.TorusGeometry(0.185, 0.018, 8, 20),
+        this.goldMat
+      );
+      circlet.rotation.x = Math.PI / 2;
+      circlet.position.y = 0.08;
+      const hair = new THREE.Mesh(
+        new THREE.SphereGeometry(0.198, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        new THREE.MeshStandardMaterial({ color: 0xfde047, roughness: 0.55 })
+      );
+      hair.position.set(0, 0.02, 0.02);
+      headGroup.add(circlet, hair);
+    } else {
+      // Aragorn: Ranger Hood + Silver Crown of Gondor
+      const hood = new THREE.Mesh(
+        new THREE.SphereGeometry(0.215, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
+        cloakMat
+      );
+      hood.position.y = 0.02;
+      const crown = new THREE.Mesh(
+        new THREE.TorusGeometry(0.19, 0.016, 8, 20),
+        this.steelMat
+      );
+      crown.rotation.x = Math.PI / 2;
+      crown.position.y = 0.08;
+      headGroup.add(hood, crown);
+    }
+
+    // 4. ARMS & THIRD-PERSON WEAPON MOUNT
+    const buildArm = (isLeft: boolean): THREE.Group => {
+      const armRoot = new THREE.Group();
+      const side = isLeft ? -1 : 1;
+      armRoot.position.set(side * 0.34, 1.38, 0);
+
+      const upper = new THREE.Mesh(this.enemyUpperArmGeo, cloakMat);
+      upper.position.y = -0.16;
+      const forearm = new THREE.Mesh(this.enemyForearmGeo, armorMat);
+      forearm.position.set(0, -0.34, -0.1);
+      forearm.rotation.x = 0.55;
+      const hand = new THREE.Mesh(this.enemyHandGeo, this.gloveMat);
+      hand.position.set(0, -0.5, -0.2);
+
+      armRoot.add(upper, forearm, hand);
+      return armRoot;
+    };
+
+    const leftArm = buildArm(true);
+    const rightArm = buildArm(false);
+    rightArm.rotation.x = 0.75;
+    leftArm.rotation.x = 0.65;
+    leftArm.rotation.y = -0.25;
+
+    const weaponGroup = new THREE.Group();
+    weaponGroup.position.set(0, -0.48, -0.26);
+    weaponGroup.rotation.x = -0.75;
+    rightArm.add(weaponGroup);
+    this.populateThirdPersonWeapon(weaponGroup, 'lorien_bow', false);
+
+    // 5. FLOATING HEALTH BAR & NAMEPLATE SPRITE
+    const hpBg = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.86, 0.09),
+      new THREE.MeshBasicMaterial({ color: 0x090d16, side: THREE.DoubleSide })
+    );
+    hpBg.position.set(0, 2.22, 0);
+
+    const hpBarFill = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.82, 0.06),
+      new THREE.MeshBasicMaterial({ color: hero.hexColor, side: THREE.DoubleSide })
+    );
+    hpBarFill.position.set(0, 2.22, 0.01);
+
+    const nameSprite = this.createPlayerNameplateSprite(playerName, hero);
+    nameSprite.position.set(0, 2.52, 0);
+
+    // 6. DOWNED / REVIVE BEACON RING
+    const downedBeacon = new THREE.Group();
+    downedBeacon.visible = false;
+    const beaconRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.85, 0.045, 8, 28),
+      new THREE.MeshBasicMaterial({ color: 0xef4444 })
+    );
+    beaconRing.rotation.x = Math.PI / 2;
+    beaconRing.position.y = 0.08;
+    const beaconPillar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.85, 2.6, 16, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xef4444,
+        transparent: true,
+        opacity: 0.18,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    );
+    beaconPillar.position.y = 1.3;
+    downedBeacon.add(beaconRing, beaconPillar);
+
+    group.add(
+      leftLeg,
+      rightLeg,
+      bodyGroup,
+      headGroup,
+      leftArm,
+      rightArm,
+      hpBg,
+      hpBarFill,
+      nameSprite,
+      downedBeacon
+    );
+
+    if (hero.id === 'gimli') {
+      group.scale.set(1.08, 0.9, 1.08);
+    }
+
+    return {
+      group,
+      headGroup,
+      bodyGroup,
+      leftArm,
+      rightArm,
+      leftLeg,
+      rightLeg,
+      weaponGroup,
+      hpBarFill,
+      nameSprite,
+      downedBeacon,
+      displayedWeaponId: 'lorien_bow',
+      displayedWeaponUpgraded: false
+    };
+  }
+
+  createPlayerNameplateSprite(playerName: string, hero: HeroPreset): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.clearRect(0, 0, 512, 128);
+
+    // Dark Fantasy Plaque Background
+    ctx.fillStyle = 'rgba(9, 13, 22, 0.82)';
+    ctx.strokeStyle = hero.color;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.roundRect(24, 18, 464, 88, 18);
+    ctx.fill();
+    ctx.stroke();
+
+    // Hero Name & Player Name
+    ctx.font = 'bold 34px Georgia, serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(playerName.toUpperCase(), 256, 62);
+
+    ctx.font = 'bold 22px Georgia, serif';
+    ctx.fillStyle = hero.color;
+    ctx.fillText(`✦ ${hero.name.toUpperCase()} ✦`, 256, 92);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthTest: false
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(1.65, 0.42, 1);
+    sprite.renderOrder = 10;
+    return sprite;
+  }
+
+  populateThirdPersonWeapon(
+    weaponGroup: THREE.Group,
+    weaponId: WeaponId,
+    isUpgraded: boolean
+  ): void {
+    while (weaponGroup.children.length > 0) {
+      weaponGroup.remove(weaponGroup.children[0]);
+    }
+
+    const glowHex = isUpgraded
+      ? 0xf0abfc
+      : weaponId === 'anor_staff'
+      ? 0xef4444
+      : weaponId === 'erebor_crossbow'
+      ? 0xf59e0b
+      : weaponId === 'bard_black_bow'
+      ? 0x22c55e
+      : 0x38bdf8;
+
+    const glowMat = new THREE.MeshBasicMaterial({ color: glowHex });
+    const bodyMat = isUpgraded
+      ? this.ensurePackAPunchMaterials(glowHex).bodyMat
+      : weaponId === 'bard_black_bow'
+      ? this.ironMat
+      : this.woodMat;
+
+    if (weaponId === 'anor_staff' || weaponId === 'durin_thunder') {
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.026, 1.35, 8),
+        bodyMat
+      );
+      shaft.rotation.x = Math.PI / 3;
+      const orb = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.11, 1),
+        glowMat
+      );
+      orb.position.set(0, 0.34, -0.58);
+      weaponGroup.add(shaft, orb);
+    } else if (weaponId === 'erebor_crossbow' || weaponId === 'mithril_repeater') {
+      const stock = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.1, 0.68),
+        bodyMat
+      );
+      const bowProd = new THREE.Mesh(
+        new THREE.BoxGeometry(0.58, 0.035, 0.06),
+        this.goldMat
+      );
+      bowProd.position.set(0, 0.03, -0.28);
+      const boltGlow = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.012, 0.48, 6).rotateX(Math.PI / 2),
+        glowMat
+      );
+      boltGlow.position.set(0, 0.06, -0.15);
+      weaponGroup.add(stock, bowProd, boltGlow);
+    } else {
+      // Elven Recurve Bow / Black Bow
+      const bowArc = new THREE.Mesh(
+        new THREE.TorusGeometry(0.42, 0.022, 8, 18, Math.PI * 1.15),
+        bodyMat
+      );
+      bowArc.rotation.y = Math.PI / 2;
+      bowArc.rotation.z = -Math.PI * 0.57;
+      bowArc.position.set(0, 0.05, -0.05);
+      const arrowMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.01, 0.01, 0.65, 6).rotateX(Math.PI / 2),
+        glowMat
+      );
+      arrowMesh.position.set(0, 0.05, -0.22);
+      weaponGroup.add(bowArc, arrowMesh);
+    }
+  }
+
+  updateRemotePlayerAvatar(
+    rig: RemotePlayerAvatarRig,
+    state: RemotePlayerState,
+    cameraPos: THREE.Vector3,
+    dt: number
+  ): void {
+    // Swap 3rd-person weapon mesh if player changed or upgraded weapon
+    if (
+      rig.displayedWeaponId !== state.weaponId ||
+      rig.displayedWeaponUpgraded !== state.weaponUpgraded
+    ) {
+      rig.displayedWeaponId = state.weaponId;
+      rig.displayedWeaponUpgraded = state.weaponUpgraded;
+      this.populateThirdPersonWeapon(rig.weaponGroup, state.weaponId, state.weaponUpgraded);
+    }
+
+    // Update Health Bar ratio & billboard orientation toward local camera
+    const hpRatio = Math.max(0.01, Math.min(1, state.health / Math.max(1, state.maxHealth)));
+    rig.hpBarFill.scale.x = hpRatio;
+    rig.hpBarFill.parent?.children.forEach((child) => {
+      if (child !== rig.nameSprite && child.position.y > 2.1) {
+        child.lookAt(cameraPos);
+      }
+    });
+
+    // Downed State Choreography
+    if (state.isDowned) {
+      rig.downedBeacon.visible = true;
+      rig.downedBeacon.rotation.y += dt * 2.4;
+      rig.group.position.set(state.x, state.y - 1.75 - 0.52, state.z);
+      rig.group.rotation.y = state.yaw;
+      rig.bodyGroup.rotation.x = 0.55;
+      rig.headGroup.rotation.x = 0.35;
+      rig.leftLeg.rotation.x = -1.2;
+      rig.rightLeg.rotation.x = 0.4;
+      return;
+    }
+
+    rig.downedBeacon.visible = false;
+
+    if ( state.isMoving ) {
+      const speedMult = state.isSprinting ? 11.0 : 7.2;
+      state.walkCycle += dt * speedMult;
+    } else {
+      state.walkCycle = THREE.MathUtils.lerp(state.walkCycle, 0, Math.min(1, dt * 8));
+    }
+
+    const stride = state.isMoving ? Math.sin(state.walkCycle) : 0;
+    const bounce = state.isMoving ? Math.abs(Math.cos(state.walkCycle)) * 0.05 : 0;
+
+    // state.y is eye height (groundY + 1.75), so avatar foot level is state.y - 1.75
+    rig.group.position.set(state.x, state.y - 1.75 + bounce, state.z);
+    rig.group.rotation.y = state.yaw;
+
+    rig.leftLeg.rotation.x = stride * 0.65;
+    rig.rightLeg.rotation.x = -stride * 0.65;
+
+    rig.bodyGroup.rotation.x = state.isSprinting ? -0.14 : 0;
+    rig.bodyGroup.rotation.y = stride * 0.1;
+
+    // Pitch head and aiming arm toward where teammate is looking
+    rig.headGroup.rotation.x = THREE.MathUtils.clamp(state.pitch, -0.7, 0.7);
+
+    if (state.attackRecoilTimer > 0) {
+      state.attackRecoilTimer = Math.max(0, state.attackRecoilTimer - dt * 4.5);
+    }
+
+    const recoilKick = state.attackRecoilTimer * 0.35;
+    rig.rightArm.rotation.x = 0.78 + state.pitch * 0.65 + recoilKick;
+    rig.leftArm.rotation.x = 0.68 + state.pitch * 0.5 + recoilKick * 0.5;
+  }
 }
+

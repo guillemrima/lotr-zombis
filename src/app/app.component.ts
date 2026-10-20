@@ -19,14 +19,19 @@ import {
   EnemyType,
   FloatingPointPopup,
   GameMapInfo,
+  HeroId,
   InteractableItem,
+  LanRoomSummary,
+  NetworkEnemySnapshot,
   PerkId,
   PerkInfo,
+  RemotePlayerState,
   WeaponConfig,
   WeaponId
 } from './models/game.models';
 import { SoundService } from './services/sound.service';
 import { MoriaSceneHelper } from './services/moria-scene.helper';
+import { LanMultiplayerService } from './services/lan-multiplayer.service';
 
 interface VisualProjectile {
   mesh: THREE.Object3D;
@@ -80,11 +85,19 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   readonly isPaused = signal(false);
   readonly isGameOver = signal(false);
 
+  // Co-op Multiplayer HUD & Downed/Revive Signals
+  readonly remotePlayersHud = signal<RemotePlayerState[]>([]);
+  readonly isDowned = signal(false);
+  readonly bleedoutRemainingSec = signal(45);
+  readonly reviveTargetPlayer = signal<RemotePlayerState | null>(null);
+  readonly reviveProgress = signal(0);
+  readonly copiedIpNotice = signal(false);
+
   private loadingTimerId: ReturnType<typeof setTimeout> | null = null;
   private fadeTimerId: ReturnType<typeof setTimeout> | null = null;
 
   // Main Menu & Map Selector State
-  readonly currentMenuScreen = signal<'main' | 'map-select' | 'settings' | 'guide'>('main');
+  readonly currentMenuScreen = signal<'main' | 'multiplayer' | 'map-select' | 'settings' | 'guide'>('main');
   readonly selectedMapId = signal<string>('khazad_dum');
 
   readonly availableMaps: GameMapInfo[] = [
@@ -369,19 +382,32 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private powerUpOrbs: PowerUpOrb[] = [];
   private popupCounter = 1;
 
-  // Hold 'F' repair timer
+  // Hold 'F' repair & revive timers
   private repairHoldTimer = 0;
+  private reviveHoldTimer = 0;
+  private bleedoutTimer = 45;
+  private isLocalMoving = false;
+  private isLocalSprinting = false;
+
+  // Real-Time LAN Multiplayer State (Up to 3 remote teammates + 1 local = 4 players)
+  private remotePlayers = new Map<string, RemotePlayerState>();
+  private lastPlayerBroadcastMs = 0;
+  private lastWorldSnapshotMs = 0;
 
   constructor(
     public sound: SoundService,
+    public mp: LanMultiplayerService,
     private ngZone: NgZone
-  ) {}
+  ) {
+    this.mp.onGamePacket = (msg) => this.handleMultiplayerPacket(msg);
+  }
 
   ngAfterViewInit(): void {
     this.initThreeScene();
     this.buildZoneOneMap();
     this.buildFirstPersonWeaponMesh();
     this.setupPointerLockListener();
+    this.mp.connectToLanServer();
 
     // Run high-frequency render loop & mousemove OUTSIDE Angular Zone so zone.js
     // never triggers full Angular Change Detection 60-144 times per second!
@@ -393,6 +419,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearTransitionTimers();
+    this.clearAllRemotePlayerAvatars();
     cancelAnimationFrame(this.animationFrameId);
     document.removeEventListener('mousemove', this.onMouseMoveBound);
     if (this.renderer) {
@@ -401,25 +428,132 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   // ===========================================================================
+  // LAN MULTIPLAYER LOBBY & ROOM CONTROLS (1 TO 4 PLAYERS)
+  // ===========================================================================
+  isAuthoritativeHost(): boolean {
+    return !this.mp.isInRoom() || this.mp.isHost();
+  }
+
+  openMultiplayerMenu(): void {
+    this.mp.connectToLanServer();
+    this.mp.refreshRoomsList();
+    this.openMenuScreen('multiplayer');
+  }
+
+  startSoloGame(): void {
+    if (this.mp.isInRoom()) {
+      this.mp.leaveRoom();
+    }
+    this.clearAllRemotePlayerAvatars();
+    this.startGame();
+  }
+
+  createLanHostRoom(): void {
+    this.sound.playMenuClick();
+    const map = this.selectedMap();
+    this.mp.createRoom({
+      mapId: map.id,
+      mapTitle: map.title,
+      startRound: this.devStartRound(),
+      freeDoors: this.devFreeDoors(),
+      bonusPoints: this.devBonusPoints()
+    });
+  }
+
+  joinLanRoom(room: LanRoomSummary): void {
+    this.sound.playMenuClick();
+    this.mp.joinRoom(room);
+  }
+
+  joinLanByDirectIp(): void {
+    this.sound.playMenuClick();
+    this.mp.joinByDirectIp();
+  }
+
+  leaveLanLobby(): void {
+    this.sound.playMenuClick();
+    this.mp.leaveRoom();
+    this.clearAllRemotePlayerAvatars();
+  }
+
+  selectHero(heroId: HeroId): void {
+    this.sound.playMenuClick();
+    this.mp.setSelectedHero(heroId);
+  }
+
+  copyLanIpToClipboard(): void {
+    const ip = this.mp.currentRoom()?.hostIp || this.mp.localLanIp();
+    navigator.clipboard?.writeText(ip).catch(() => {});
+    this.copiedIpNotice.set(true);
+    setTimeout(() => this.copiedIpNotice.set(false), 2000);
+  }
+
+  launchMultiplayerMatchFromHost(): void {
+    if (!this.mp.isHost()) return;
+    this.mp.startMatch({
+      startRound: this.devStartRound(),
+      freeDoors: this.devFreeDoors(),
+      bonusPoints: this.devBonusPoints()
+    });
+    this.startGame();
+  }
+
+  private getSpawnPosForSlot(slotIndex: number): THREE.Vector3 {
+    const spawns = [
+      new THREE.Vector3(0, 1.75, 6.2),
+      new THREE.Vector3(-2.4, 1.75, 6.8),
+      new THREE.Vector3(2.4, 1.75, 6.8),
+      new THREE.Vector3(0, 1.75, 8.8)
+    ];
+    return spawns[Math.abs(slotIndex) % spawns.length].clone();
+  }
+
+  private clearAllRemotePlayerAvatars(): void {
+    for (const remote of this.remotePlayers.values()) {
+      if (remote.avatar && this.scene) {
+        this.scene.remove(remote.avatar.group);
+      }
+    }
+    this.remotePlayers.clear();
+    this.remotePlayersHud.set([]);
+  }
+
+  // ===========================================================================
   // GAME FLOW & MULTI-DOOR CONTROLS
   // ===========================================================================
   setDevStartRound(value: string | number): void {
     const parsed = Math.floor(Number(value));
     if (!Number.isNaN(parsed)) {
-      this.devStartRound.set(Math.max(1, Math.min(99, parsed)));
+      const clamped = Math.max(1, Math.min(99, parsed));
+      this.devStartRound.set(clamped);
+      if (this.mp.isInRoom() && this.mp.isHost()) {
+        this.mp.sendGameEvent({ type: 'update_profile', startRound: clamped });
+      }
     }
   }
 
   adjustDevStartRound(delta: number): void {
-    this.devStartRound.update((r) => Math.max(1, Math.min(99, r + delta)));
+    this.setDevStartRound(this.devStartRound() + delta);
   }
 
   toggleDevBonusPoints(): void {
     this.devBonusPoints.update((v) => !v);
+    if (this.mp.isInRoom() && this.mp.isHost()) {
+      this.mp.sendGameEvent({
+        type: 'update_profile',
+        bonusPoints: this.devBonusPoints()
+      });
+    }
   }
 
   toggleDevFreeDoors(): void {
     this.devFreeDoors.update((v) => !v);
+    if (this.mp.isInRoom() && this.mp.isHost()) {
+      this.mp.sendGameEvent({
+        type: 'update_profile',
+        freeDoors: this.devFreeDoors()
+      });
+    }
     if (this.gameStarted() && this.devFreeDoors()) {
       this.unlockAllDoors(false);
     }
@@ -456,7 +590,12 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     return false;
   }
 
-  private unlockDoor(doorId: DoorId, title?: string, showBannerMsg = true): void {
+  private unlockDoor(
+    doorId: DoorId,
+    title?: string,
+    showBannerMsg = true,
+    broadcastToLan = true
+  ): void {
     if (!this.unlockedDoors().includes(doorId)) {
       this.unlockedDoors.update((list) => [...list, doorId]);
     }
@@ -464,9 +603,17 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (showBannerMsg && title) {
       this.showBanner(`Acceso Abierto: ${title}`);
     }
+    if (broadcastToLan && this.mp.isInRoom()) {
+      this.mp.sendGameEvent({
+        type: 'door_unlock',
+        doorId,
+        title: title || doorId,
+        openerName: this.mp.playerName()
+      });
+    }
   }
 
-  unlockAllDoors(showBannerMsg = true): void {
+  unlockAllDoors(showBannerMsg = true, broadcastToLan = true): void {
     const allIds: DoorId[] = [
       'door_zone_2',
       'door_zone_3_north',
@@ -480,12 +627,22 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (showBannerMsg) {
       this.showBanner('Todas las Puertas de Khazad-dûm Abiertas');
     }
+    if (broadcastToLan && this.mp.isInRoom()) {
+      for (const id of allIds) {
+        this.mp.sendGameEvent({
+          type: 'door_unlock',
+          doorId: id,
+          title: 'Todas las Salas',
+          openerName: this.mp.playerName()
+        });
+      }
+    }
   }
 
   // ===========================================================================
   // MAIN MENU & MAP NAVIGATION
   // ===========================================================================
-  openMenuScreen(screen: 'main' | 'map-select' | 'settings' | 'guide'): void {
+  openMenuScreen(screen: 'main' | 'multiplayer' | 'map-select' | 'settings' | 'guide'): void {
     this.currentMenuScreen.set(screen);
     this.sound.playMenuClick();
   }
@@ -534,17 +691,26 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (document.pointerLockElement) {
       document.exitPointerLock?.();
     }
+    if (this.mp.isInRoom()) {
+      this.mp.leaveRoom();
+    }
+    this.clearAllRemotePlayerAvatars();
+
     this.isLoadingMap.set(false);
     this.isFadingFromBlack.set(false);
     this.gameStarted.set(false);
     this.isPaused.set(false);
     this.isGameOver.set(false);
+    this.isDowned.set(false);
     this.showTacticalMap.set(false);
     this.cancelReload();
     this.keys = {};
     this.isMouseDown = false;
     this.repairHoldTimer = 0;
     this.repairProgress.set(0);
+    this.reviveHoldTimer = 0;
+    this.reviveProgress.set(0);
+    this.reviveTargetPlayer.set(null);
 
     for (const enemy of this.enemies) {
       this.scene.remove(enemy.mesh);
@@ -580,14 +746,29 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.sound.playMenuClick();
   }
 
-  startGame(): void {
+  startGame(fromNetworkMatchStart = false): void {
     if (this.isLoadingMap()) return;
+
+    // If Host restarts from Pause/GameOver during a multiplayer game, notify all teammates
+    if (
+      !fromNetworkMatchStart &&
+      this.gameStarted() &&
+      this.mp.isInRoom() &&
+      this.mp.isHost()
+    ) {
+      this.mp.sendGameEvent({
+        type: 'restart_match',
+        startRound: this.devStartRound(),
+        freeDoors: this.devFreeDoors(),
+        bonusPoints: this.devBonusPoints()
+      });
+    }
 
     this.clearTransitionTimers();
     this.sound.playMenuLaunch();
     this.lockPointer();
 
-    // If launching from the Main Menu / Map Selector, show the 3-second Map Loading Screen
+    // If launching from the Main Menu / Map Selector / Lobby, show the 3-second Map Loading Screen
     // followed by a 1-second Fade-In from Black when the match begins.
     if (!this.gameStarted()) {
       this.isLoadingMap.set(true);
@@ -617,12 +798,24 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   private launchMatchNow(): void {
+    const room = this.mp.currentRoom();
+    if (room) {
+      this.devStartRound.set(room.startRound || 1);
+      this.devFreeDoors.set(Boolean(room.freeDoors));
+      this.devBonusPoints.set(
+        room.bonusPoints !== undefined ? Boolean(room.bonusPoints) : true
+      );
+    }
+
     const initialRound = Math.max(1, Math.min(99, Math.floor(this.devStartRound() || 1)));
     this.devStartRound.set(initialRound);
 
     this.gameStarted.set(true);
     this.isGameOver.set(false);
     this.isPaused.set(false);
+    this.isDowned.set(false);
+    this.bleedoutTimer = 45;
+    this.bleedoutRemainingSec.set(45);
     this.showTacticalMap.set(false);
 
     if (this.viewModelGroup) {
@@ -634,10 +827,13 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.isMouseDown = false;
     this.repairHoldTimer = 0;
     this.repairProgress.set(0);
+    this.reviveHoldTimer = 0;
+    this.reviveProgress.set(0);
+    this.reviveTargetPlayer.set(null);
 
-    // Initialize all 6 Buyable Doors based on Developer Setting
+    // Initialize all 6 Buyable Doors based on Developer/Room Setting
     if (this.devFreeDoors()) {
-      this.unlockAllDoors(false);
+      this.unlockAllDoors(false, false);
     } else {
       this.unlockedDoors.set([]);
       this.sceneHelper.setAllDoorsOpen(false);
@@ -665,8 +861,11 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.switchProgress = 0;
     this.viewModelGroup.position.y = -0.62;
 
+    const spawnVec = this.mp.isInRoom()
+      ? this.getSpawnPosForSlot(this.mp.localSlotIndex())
+      : new THREE.Vector3(0, 1.75, 6.2);
     this.playerGroundY = 0;
-    this.playerPos.set(0, 1.75, 6.2);
+    this.playerPos.copy(spawnVec);
     this.yaw = 0;
     this.pitch = 0;
 
@@ -685,8 +884,13 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       win.plankMeshes.forEach((m) => (m.visible = true));
     }
 
+    // Sync initial 3D avatars for all teammates currently in the room
+    if (room) {
+      this.syncRoomRosterAvatars(room);
+    }
+
     this.clock.getDelta();
-    this.startRound(initialRound);
+    this.startRound(initialRound, false);
   }
 
   resumeGame(): void {
@@ -713,6 +917,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     document.addEventListener('pointerlockchange', () => {
       const locked = document.pointerLockElement === this.canvasRef.nativeElement;
       if (!locked && this.gameStarted() && !this.isLoadingMap() && !this.isGameOver()) {
+        // In Multiplayer, opening the pause menu doesn't freeze the live LAN world,
+        // it simply shows the overlay while keeping network & 3D updates running!
         this.isPaused.set(true);
         this.keys = {};
         this.isMouseDown = false;
@@ -724,7 +930,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   // ===========================================================================
-  // ROUND & HORDE SYSTEM
+  // ROUND & HORDE SYSTEM (SOLO & MULTI-PLAYER CO-OP)
   // ===========================================================================
   formatRound(r: number): string {
     if (r >= 10) return String(r);
@@ -732,29 +938,60 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     return romans[r] || String(r);
   }
 
-  private startRound(roundNum: number): void {
+  private startRound(roundNum: number, broadcastToClients = true): void {
     this.round.set(roundNum);
     this.roundTransitioning.set(true);
     this.roundBannerText.set(`RONDA ${this.formatRound(roundNum)}`);
     this.repairedPointsThisRound = 0;
     this.sound.playRoundHornAndDrums();
 
-    const totalForRound = Math.floor(6 + roundNum * 4.0);
-    this.enemiesToSpawnInRound = totalForRound;
-    this.enemiesRemaining.set(totalForRound);
-    this.spawnCooldown = 1.8;
+    // Automatically revive downed players at the start of a new round
+    if (this.isDowned()) {
+      this.reviveLocalPlayer();
+    }
+
+    const playerCount = Math.max(1, 1 + this.remotePlayers.size);
+    const coopScale = 1 + (playerCount - 1) * 0.35;
+    const totalForRound = Math.floor((6 + roundNum * 4.0) * coopScale);
+
+    if (this.isAuthoritativeHost()) {
+      this.enemiesToSpawnInRound = totalForRound;
+      this.enemiesRemaining.set(totalForRound);
+      this.spawnCooldown = 1.8;
+
+      if (broadcastToClients && this.mp.isInRoom()) {
+        this.mp.sendGameEvent({
+          type: 'round_change',
+          round: roundNum,
+          enemiesRemaining: totalForRound
+        });
+      }
+    }
 
     setTimeout(() => {
       this.roundTransitioning.set(false);
     }, 2400);
   }
 
+  /**
+   * Spawns the next Orc on the authoritative Host, distributing spawns across
+   * rooms occupied by ANY alive player in the match and assigning initial target.
+   */
   private spawnNextEnemy(): void {
     const unlockedWindows = this.windows.filter((w) => this.isRoomUnlocked(w.roomId));
-    const playerRoomInfo = this.sceneHelper.getRoomInfoAt(this.playerPos.x, this.playerPos.z);
-    const sameRoomWindows = unlockedWindows.filter((w) => w.roomId === playerRoomInfo.roomId);
+    const allTargets = this.getAllPlayerTargets();
+    const aliveTargets = allTargets.filter((t) => !t.isDowned);
+    const activePool = aliveTargets.length > 0 ? aliveTargets : allTargets;
+
+    // Pick a player to spawn near (distributes horde pressure across all players!)
+    const chosenTarget =
+      activePool[Math.floor(Math.random() * activePool.length)] || activePool[0];
+    const targetRoomInfo = this.sceneHelper.getRoomInfoAt(chosenTarget.x, chosenTarget.z);
+    const sameRoomWindows = unlockedWindows.filter(
+      (w) => w.roomId === targetRoomInfo.roomId
+    );
     const pool =
-      sameRoomWindows.length > 0 && Math.random() < 0.72
+      sameRoomWindows.length > 0 && Math.random() < 0.76
         ? sameRoomWindows
         : unlockedWindows;
     const targetWin =
@@ -814,7 +1051,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       playerAttackTimer: 0,
       walkCycle: Math.random() * Math.PI * 2,
       hitFlashTimer: 0,
-      deathTimer: 0
+      deathTimer: 0,
+      targetPlayerId: chosenTarget.id,
+      targetReevalTimer: 0.4
     };
 
     this.enemies.push(entity);
@@ -1155,6 +1394,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (e.code === 'KeyF') {
       this.repairHoldTimer = 0;
       this.repairProgress.set(0);
+      this.reviveHoldTimer = 0;
+      this.reviveProgress.set(0);
     }
   }
 
@@ -1174,7 +1415,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   private tryShoot(): void {
-    if (this.isReloading() || this.isWeaponBusySwitching()) return;
+    if (this.isDowned() || this.isReloading() || this.isWeaponBusySwitching()) return;
     const weapon = this.currentWeapon();
     const now = performance.now();
 
@@ -1214,6 +1455,20 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
       this.spawnVisualBolt(dir, weapon, p === 0);
       this.evaluateShotRay(dir, weapon, damageMultiplier, isInstaKill, p === 0);
+
+      if (p === 0 && this.mp.isInRoom()) {
+        this.mp.sendGameEvent({
+          type: 'player_shoot',
+          weaponId: weapon.id,
+          isUpgraded: weapon.isUpgraded,
+          x: this.playerPos.x,
+          y: this.playerPos.y - 0.15,
+          z: this.playerPos.z,
+          dx: dir.x,
+          dy: dir.y,
+          dz: dir.z
+        });
+      }
     }
 
     if (weapon.currentMag === 0 && weapon.reserveAmmo > 0) {
@@ -1525,16 +1780,39 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private applyEnemyDamage(enemy: EnemyEntity, dmg: number, isHeadshot: boolean): void {
+  private applyEnemyDamage(
+    enemy: EnemyEntity,
+    dmg: number,
+    isHeadshot: boolean,
+    fromNetwork = false,
+    attackerId?: string
+  ): void {
     if (enemy.state === 'dead') return;
 
     enemy.hp -= dmg;
     enemy.hitFlashTimer = isHeadshot ? 0.24 : 0.16;
-    this.sound.playHit(isHeadshot);
 
-    this.hitmarkerActive.set(true);
-    this.hitmarkerCrit.set(isHeadshot);
-    setTimeout(() => this.hitmarkerActive.set(false), 110);
+    // Register threat/aggro so the Orc intelligently reacts to the shooter
+    const sourcePlayerId = attackerId || this.mp.localPlayerId() || 'solo';
+    enemy.aggroPlayerId = sourcePlayerId;
+    enemy.aggroTimer = 4.5;
+
+    if (!fromNetwork) {
+      this.sound.playHit(isHeadshot);
+      this.hitmarkerActive.set(true);
+      this.hitmarkerCrit.set(isHeadshot);
+      setTimeout(() => this.hitmarkerActive.set(false), 110);
+
+      if (this.mp.isInRoom() && !this.isAuthoritativeHost()) {
+        this.mp.sendGameEvent({
+          type: 'enemy_hit',
+          enemyId: enemy.id,
+          damage: dmg,
+          isHeadshot,
+          attackerId: this.mp.localPlayerId()
+        });
+      }
+    }
 
     const ratio = Math.max(0.01, enemy.hp / enemy.maxHp);
     enemy.hpBarFill.scale.x = ratio;
@@ -1542,28 +1820,37 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (enemy.hp <= 0) {
       enemy.state = 'dead';
       enemy.deathTimer = 0.72;
-      this.kills.update((k) => k + 1);
       if (isHeadshot) {
-        this.headshots.update((h) => h + 1);
         enemy.headMesh.scale.setScalar(0.01); // Headshot pop!
       }
-      const killPoints = isHeadshot ? 100 : 60;
-      this.awardPoints(killPoints, isHeadshot);
-      this.maybeDropPowerUp(enemy.mesh.position);
-      this.onEnemyKilled();
-    } else {
+
+      if (!fromNetwork) {
+        this.kills.update((k) => k + 1);
+        if (isHeadshot) {
+          this.headshots.update((h) => h + 1);
+        }
+        const killPoints = isHeadshot ? 100 : 60;
+        this.awardPoints(killPoints, isHeadshot);
+      }
+
+      if (this.isAuthoritativeHost()) {
+        this.maybeDropPowerUp(enemy.mesh.position);
+        this.onEnemyKilled();
+      }
+    } else if (!fromNetwork) {
       this.awardPoints(10, false);
     }
   }
 
   private onEnemyKilled(): void {
+    if (!this.isAuthoritativeHost()) return;
     const aliveCount = this.enemies.filter((e) => e.state !== 'dead').length;
     this.enemiesRemaining.set(aliveCount + this.enemiesToSpawnInRound);
 
     if (aliveCount === 0 && this.enemiesToSpawnInRound === 0) {
       setTimeout(() => {
         if (!this.isGameOver()) {
-          this.startRound(this.round() + 1);
+          this.startRound(this.round() + 1, true);
         }
       }, 2000);
     }
@@ -1635,6 +1922,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   // INTERACTABLES ACROSS ALL 5 ROOMS
   // ===========================================================================
   private triggerImmediateInteract(): void {
+    if (this.isDowned()) return;
     const item = this.activeInteractable();
     if (!item || item.type === 'window') return;
 
@@ -1695,7 +1983,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       if (doorCost > 0) {
         this.points.update((p) => p - doorCost);
       }
-      this.unlockDoor(item.doorId, item.title, true);
+      this.unlockDoor(item.doorId, item.title, true, true);
       this.sound.playPurchase();
     } else if (item.type === 'pack_a_punch') {
       const w = this.currentWeapon();
@@ -1781,14 +2069,42 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       { type: 'max_ammo', name: 'Munición Máxima', color: 0x22c55e }
     ];
     const picked = types[Math.floor(Math.random() * types.length)];
-
+    const orbId = this.nextEnemyId++;
     const groundY = this.sceneHelper.getFloorHeightAt(pos.x, pos.z);
+    const orbY = groundY + 1.0;
+
+    this.spawnPowerUpOrbVisual(orbId, picked.type, picked.name, picked.color, pos.x, orbY, pos.z);
+
+    if (this.mp.isInRoom()) {
+      this.mp.sendGameEvent({
+        type: 'powerup_spawn',
+        orbId,
+        orbType: picked.type,
+        name: picked.name,
+        color: picked.color,
+        x: pos.x,
+        y: orbY,
+        z: pos.z
+      });
+    }
+  }
+
+  private spawnPowerUpOrbVisual(
+    orbId: number,
+    type: 'insta_kill' | 'double_points' | 'max_ammo',
+    name: string,
+    color: number,
+    x: number,
+    y: number,
+    z: number
+  ): void {
+    if (this.powerUpOrbs.some((o) => o.id === orbId)) return;
     const group = new THREE.Group();
-    group.position.set(pos.x, groundY + 1.0, pos.z);
+    group.position.set(x, y, z);
 
     const orb = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.36, 1),
-      new THREE.MeshBasicMaterial({ color: picked.color })
+      new THREE.MeshBasicMaterial({ color })
     );
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.48, 0.03, 6, 16),
@@ -1798,9 +2114,9 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.scene.add(group);
 
     this.powerUpOrbs.push({
-      id: this.nextEnemyId++,
-      type: picked.type,
-      name: picked.name,
+      id: orbId,
+      type,
+      name,
       mesh: group,
       position: group.position,
       life: 18
@@ -1867,7 +2183,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       this.fpsFrames = 0;
       this.fpsLastCheck = now;
 
-      // Also refresh Room/Floor HUD Telemetry & Tactical Map coordinates at 4Hz
+      // Also refresh Room/Floor HUD Telemetry, Squad HUD & Tactical Map coordinates at 4Hz
       if (this.sceneHelper) {
         const info = this.sceneHelper.getRoomInfoAt(this.playerPos.x, this.playerPos.z);
         if (this.currentRoomName() !== info.name) {
@@ -1880,6 +2196,12 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         this.playerMapX.set(Math.round(this.playerPos.x * 10) / 10);
         this.playerMapY.set(Math.round(this.playerPos.z * 10) / 10);
         this.playerMapRotDeg.set(Math.round((-this.yaw * 180) / Math.PI));
+      }
+
+      if (this.remotePlayers.size > 0 || this.remotePlayersHud().length > 0) {
+        this.remotePlayersHud.set(
+          Array.from(this.remotePlayers.values()).map((r) => ({ ...r }))
+        );
       }
     }
 
@@ -1898,17 +2220,30 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       this.camera.rotation.z = 0;
     }
 
-    if (this.gameStarted() && !this.isPaused() && !this.isGameOver()) {
-      this.updateWeaponSwitch(dt);
-      this.updateReload(dt);
-      this.updateSpawner(dt);
+    // In LAN Co-op, the world stays live even if one player opens the ESC pause overlay
+    const isWorldActive =
+      this.gameStarted() &&
+      !this.isGameOver() &&
+      (!this.isPaused() || this.mp.isInRoom());
+
+    if (isWorldActive) {
+      if (!this.isPaused()) {
+        this.updateWeaponSwitch(dt);
+        this.updateReload(dt);
+        this.updatePlayerMovement(dt);
+        this.updateAutoFire();
+        this.updateInteractablesAndBarricades(dt);
+      }
+      this.updateDownedAndRevive(dt);
+      if (this.isAuthoritativeHost()) {
+        this.updateSpawner(dt);
+      }
       this.updateEnemies(dt);
-      this.updatePlayerMovement(dt);
-      this.updateAutoFire();
+      this.updateRemotePlayers(dt);
       this.updateProjectiles(dt);
       this.updatePowerUpOrbs(dt);
-      this.updateInteractablesAndBarricades(dt);
       this.updateHealthRegen(dt);
+      this.broadcastMultiplayerState(now);
     }
 
     this.renderer.render(this.scene, this.camera);
@@ -1945,12 +2280,16 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveDir.sub(right);
 
     const isMoving = moveDir.lengthSq() > 0;
-    const aiming = this.isAiming() && !this.isReloading() && this.switchPhase === 'none';
+    const downed = this.isDowned();
+    const aiming = !downed && this.isAiming() && !this.isReloading() && this.switchPhase === 'none';
     const isSprinting =
-      isMoving && !aiming && (this.keys['ShiftLeft'] || this.keys['ShiftRight']);
+      !downed && isMoving && !aiming && (this.keys['ShiftLeft'] || this.keys['ShiftRight']);
     const staminUpBonus = this.hasPerk('earendil_light') ? 1.25 : 1.0;
-    const baseSpeed = aiming ? 3.8 : isSprinting ? 7.6 : 5.4;
-    const speed = baseSpeed * staminUpBonus;
+    const baseSpeed = downed ? 1.45 : aiming ? 3.8 : isSprinting ? 7.6 : 5.4;
+    const speed = baseSpeed * (downed ? 1.0 : staminUpBonus);
+
+    this.isLocalMoving = isMoving;
+    this.isLocalSprinting = isSprinting;
 
     let targetCamBobY = 0;
     let targetCamBobX = 0;
@@ -1977,6 +2316,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         }
 
         this.resolvePlayerEnemyCollisions();
+        this.resolvePlayerToTeammateCollisions();
       }
 
       const actualMoved = Math.hypot(this.playerPos.x - prevX, this.playerPos.z - prevZ);
@@ -1999,16 +2339,18 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     } else {
       this.walkBobTimer = 0;
       this.resolvePlayerEnemyCollisions();
+      this.resolvePlayerToTeammateCollisions();
     }
 
-    // Smoothly follow multi-floor & staircase vertical elevation
+    // Smoothly follow multi-floor & staircase vertical elevation (lower eye height when downed!)
     const targetGroundY = this.sceneHelper.getFloorHeightAt(this.playerPos.x, this.playerPos.z);
     this.playerGroundY = THREE.MathUtils.lerp(
       this.playerGroundY,
       targetGroundY,
       Math.min(1, dt * 18)
     );
-    this.playerPos.y = this.playerGroundY + 1.75;
+    const eyeHeight = downed ? 0.85 : 1.75;
+    this.playerPos.y = this.playerGroundY + eyeHeight;
 
     const lerpFactor = Math.min(1, dt * 12);
     this.camBobOffsetY = THREE.MathUtils.lerp(this.camBobOffsetY, targetCamBobY, lerpFactor);
@@ -2032,6 +2374,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     }
 
     if (this.viewModelGroup) {
+      this.viewModelGroup.visible = !downed;
       const fireRateSec = this.getEffectiveFireRateMs(this.currentWeapon()) / 1000;
       const recoilDecay = Math.max(1.1, 0.35 / Math.max(0.1, fireRateSec));
       this.viewModelRecoil = Math.max(0, this.viewModelRecoil - dt * recoilDecay);
@@ -2258,8 +2601,34 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  private resolvePlayerToTeammateCollisions(): void {
+    const minSep = 0.88;
+    for (const remote of this.remotePlayers.values()) {
+      if (remote.isDowned) continue;
+      const remoteGroundY = remote.y - 1.75;
+      if (Math.abs(this.playerGroundY - remoteGroundY) > 1.8) continue;
+
+      const dx = this.playerPos.x - remote.x;
+      const dz = this.playerPos.z - remote.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < minSep && dist > 0.0001) {
+        const push = (minSep - dist) * 0.5;
+        const nx = dx / dist;
+        const nz = dz / dist;
+        const candX = this.playerPos.x + nx * push;
+        const candZ = this.playerPos.z + nz * push;
+        if (this.canMoveToStatic(candX, this.playerPos.z)) {
+          this.playerPos.x = candX;
+        }
+        if (this.canMoveToStatic(this.playerPos.x, candZ)) {
+          this.playerPos.z = candZ;
+        }
+      }
+    }
+  }
+
   private updateAutoFire(): void {
-    if (this.isMouseDown) {
+    if (this.isMouseDown && !this.isDowned()) {
       this.tryShoot();
     }
   }
@@ -2267,20 +2636,168 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private updateSpawner(dt: number): void {
     if (this.roundTransitioning() || this.enemiesToSpawnInRound <= 0) return;
 
+    const playerCount = Math.max(1, 1 + this.remotePlayers.size);
+    const maxActiveCap = Math.min(36, 24 + (playerCount - 1) * 4);
     const activeCount = this.enemies.filter((e) => e.state !== 'dead').length;
-    if (activeCount >= 24) return;
+    if (activeCount >= maxActiveCap) return;
 
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0) {
       this.spawnNextEnemy();
       this.enemiesToSpawnInRound--;
-      this.spawnCooldown = Math.max(0.6, 1.9 - this.round() * 0.11);
+      this.spawnCooldown = Math.max(0.55, 1.9 - this.round() * 0.11);
     }
   }
 
   // ===========================================================================
-  // MULTI-ROOM & MULTI-STAIRCASE PORTAL BFS NAVIGATION FOR ENEMIES
+  // INTELLIGENT MULTI-PLAYER TARGET SELECTION & PORTAL BFS NAVIGATION
   // ===========================================================================
+  private getAllPlayerTargets(): Array<{
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+    z: number;
+    groundY: number;
+    isDowned: boolean;
+    isLocal: boolean;
+  }> {
+    const localId = this.mp.localPlayerId() || 'solo';
+    const list = [
+      {
+        id: localId,
+        name: this.mp.playerName(),
+        x: this.playerPos.x,
+        y: this.playerPos.y,
+        z: this.playerPos.z,
+        groundY: this.playerGroundY,
+        isDowned: this.isDowned(),
+        isLocal: true
+      }
+    ];
+
+    for (const remote of this.remotePlayers.values()) {
+      list.push({
+        id: remote.id,
+        name: remote.name,
+        x: remote.x,
+        y: remote.y,
+        z: remote.z,
+        groundY: remote.y - (remote.isDowned ? 0.85 : 1.75),
+        isDowned: remote.isDowned,
+        isLocal: false
+      });
+    }
+
+    return list;
+  }
+
+  /**
+   * Intelligently selects which player an Orc should hunt by combining:
+   * 1) 2D Distance + Vertical Floor Elevation Cost + Same-Room Preference
+   * 2) Pack-Splitting Load Balancing (prevents all Orcs from clumping onto 1 player)
+   * 3) Threat / Aggro Priority when a player shoots the Orc
+   * 4) Sticky Target Hysteresis so Orcs don't jitter when players are equidistant
+   */
+  private selectTargetPlayerForEnemy(
+    enemy: EnemyEntity,
+    dt: number
+  ): {
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+    z: number;
+    groundY: number;
+    isDowned: boolean;
+    isLocal: boolean;
+  } {
+    const allPlayers = this.getAllPlayerTargets();
+    const alivePlayers = allPlayers.filter((p) => !p.isDowned);
+    const candidates = alivePlayers.length > 0 ? alivePlayers : allPlayers;
+
+    if (candidates.length === 1) {
+      enemy.targetPlayerId = candidates[0].id;
+      return candidates[0];
+    }
+
+    if (enemy.aggroTimer && enemy.aggroTimer > 0) {
+      enemy.aggroTimer = Math.max(0, enemy.aggroTimer - dt);
+    }
+
+    enemy.targetReevalTimer = (enemy.targetReevalTimer ?? 0) - dt;
+    const currentTarget = candidates.find((p) => p.id === enemy.targetPlayerId);
+
+    // Keep current target between re-evaluation intervals unless aggro changed or target fell
+    if (currentTarget && enemy.targetReevalTimer > 0) {
+      return currentTarget;
+    }
+
+    enemy.targetReevalTimer = 0.42 + (enemy.id % 5) * 0.06;
+
+    // Count how many other alive chasing Orcs are already hunting each player
+    const assignedCounts = new Map<string, number>();
+    let totalChasing = 0;
+    for (const other of this.enemies) {
+      if (other.id === enemy.id || other.state !== 'chasing') continue;
+      if (other.targetPlayerId) {
+        assignedCounts.set(
+          other.targetPlayerId,
+          (assignedCounts.get(other.targetPlayerId) || 0) + 1
+        );
+        totalChasing++;
+      }
+    }
+
+    const idealShare = Math.ceil((totalChasing + 1) / candidates.length);
+    const ex = enemy.mesh.position.x;
+    const ez = enemy.mesh.position.z;
+    const enemyGroundY = this.sceneHelper.getFloorHeightAt(ex, ez);
+    const enemyZone = this.classifyNavZone(ex, ez);
+
+    let bestCandidate = candidates[0];
+    let bestScore = Infinity;
+
+    for (const cand of candidates) {
+      const dist2D = Math.hypot(cand.x - ex, cand.z - ez);
+      const elevDiff = Math.abs(cand.groundY - enemyGroundY);
+      const candZone = this.classifyNavZone(cand.x, cand.z);
+      const sameZoneBonus = enemyZone === candZone ? -3.8 : 0;
+
+      const countForPlayer = assignedCounts.get(cand.id) || 0;
+      const overloadPenalty =
+        countForPlayer * 3.1 + (countForPlayer >= idealShare ? 4.5 : 0);
+
+      // Threat/Aggro bonus if this player recently shot this Orc from within 22m
+      const aggroBonus =
+        enemy.aggroTimer &&
+        enemy.aggroTimer > 0 &&
+        enemy.aggroPlayerId === cand.id &&
+        dist2D < 22
+          ? -6.5
+          : 0;
+
+      // Sticky hysteresis bonus for current target
+      const stickyBonus = enemy.targetPlayerId === cand.id ? -2.4 : 0;
+
+      const score =
+        dist2D +
+        elevDiff * 1.85 +
+        sameZoneBonus +
+        overloadPenalty +
+        aggroBonus +
+        stickyBonus;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestCandidate = cand;
+      }
+    }
+
+    enemy.targetPlayerId = bestCandidate.id;
+    return bestCandidate;
+  }
+
   private classifyNavZone(x: number, z: number): string {
     if (x < -14.0) {
       if (x > -22.0) {
@@ -2305,13 +2822,16 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
   /**
    * Computes a dynamic waypoint for chasing enemies across all 5 rooms, 8 staircases,
-   * and internal elevated terraces using a fast Portal BFS over unlocked doors.
+   * and internal elevated terraces using a fast Portal BFS over unlocked doors
+   * toward ANY target player's coordinates (px, pz).
    */
-  private getChasingTargetForEnemy(enemy: EnemyEntity): THREE.Vector3 {
+  private getChasingTargetForEnemy(
+    enemy: EnemyEntity,
+    px = this.playerPos.x,
+    pz = this.playerPos.z
+  ): THREE.Vector3 {
     const ex = enemy.mesh.position.x;
     const ez = enemy.mesh.position.z;
-    const px = this.playerPos.x;
-    const pz = this.playerPos.z;
 
     const startNode = this.classifyNavZone(ex, ez);
     const goalNode = this.classifyNavZone(px, pz);
@@ -2557,6 +3077,11 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   private updateEnemies(dt: number): void {
+    if (!this.isAuthoritativeHost()) {
+      this.updateEnemiesClientInterpolation(dt);
+      return;
+    }
+
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
 
@@ -2613,6 +3138,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       enemy.leftArm.rotation.x = -Math.PI / 2.5 + Math.cos(enemy.walkCycle) * 0.26 + stagger * 0.5;
       enemy.rightArm.rotation.x = -Math.PI / 2.5 - Math.cos(enemy.walkCycle) * 0.26 + stagger * 0.5;
 
+      const targetPlayer = this.selectTargetPlayerForEnemy(enemy, dt);
+
       if (enemy.state === 'approaching_window' && win) {
         const target = win.position;
         this.moveEnemyToward(enemy, target, dt, false);
@@ -2625,7 +3152,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           enemy.state = 'breaking_barrier';
         }
       } else if (enemy.state === 'breaking_barrier' && win) {
-        enemy.mesh.lookAt(this.playerPos.x, enemy.mesh.position.y, this.playerPos.z);
+        enemy.mesh.lookAt(targetPlayer.x, enemy.mesh.position.y, targetPlayer.z);
         if (win.planks > 0) {
           enemy.barrierAttackTimer += dt;
           const swipe = Math.sin(enemy.barrierAttackTimer * Math.PI * 1.4);
@@ -2649,35 +3176,117 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           }
         }
       } else if (enemy.state === 'chasing') {
-        const distToPlayer2D = Math.hypot(
-          this.playerPos.x - enemy.mesh.position.x,
-          this.playerPos.z - enemy.mesh.position.z
+        const distToTarget2D = Math.hypot(
+          targetPlayer.x - enemy.mesh.position.x,
+          targetPlayer.z - enemy.mesh.position.z
         );
-        const heightDiff = Math.abs(this.playerGroundY - baseGroundY);
+        const heightDiff = Math.abs(targetPlayer.groundY - baseGroundY);
         const minContactDist = this.getPlayerEnemyMinDist(enemy);
 
-        if (distToPlayer2D > minContactDist + 0.04 || heightDiff > 1.5) {
-          const navTarget = this.getChasingTargetForEnemy(enemy);
+        if (distToTarget2D > minContactDist + 0.04 || heightDiff > 1.5) {
+          const navTarget = this.getChasingTargetForEnemy(
+            enemy,
+            targetPlayer.x,
+            targetPlayer.z
+          );
           this.moveEnemyToward(enemy, navTarget, dt, true);
         } else {
-          enemy.mesh.lookAt(this.playerPos.x, enemy.mesh.position.y, this.playerPos.z);
+          enemy.mesh.lookAt(targetPlayer.x, enemy.mesh.position.y, targetPlayer.z);
         }
 
-        if (distToPlayer2D <= 1.52 && heightDiff <= 1.5) {
-          enemy.mesh.lookAt(this.playerPos.x, enemy.mesh.position.y, this.playerPos.z);
+        if (distToTarget2D <= 1.56 && heightDiff <= 1.5) {
+          enemy.mesh.lookAt(targetPlayer.x, enemy.mesh.position.y, targetPlayer.z);
           enemy.playerAttackTimer += dt;
           const slash = Math.sin(enemy.playerAttackTimer * Math.PI * 2);
           enemy.rightArm.rotation.x = -Math.PI / 1.6 + slash * 0.85;
           enemy.leftArm.rotation.x = -Math.PI / 1.9 - slash * 0.55;
           if (enemy.playerAttackTimer >= 0.95) {
             enemy.playerAttackTimer = 0;
-            this.damagePlayer(enemy.damage);
+            if (targetPlayer.isLocal) {
+              this.damagePlayer(enemy.damage);
+            } else if (this.mp.isInRoom()) {
+              this.mp.sendGameEvent({
+                type: 'player_damaged',
+                targetPlayerId: targetPlayer.id,
+                damage: enemy.damage,
+                enemyId: enemy.id
+              });
+            }
           }
         }
       }
     }
 
     this.resolveEnemyToEnemyCollisions();
+  }
+
+  /**
+   * Smooth 60-144 FPS client-side interpolation and limb choreography for enemies
+   * controlled by the authoritative LAN Host.
+   */
+  private updateEnemiesClientInterpolation(dt: number): void {
+    const lerpPos = Math.min(1, dt * 15);
+
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const enemy = this.enemies[i];
+
+      enemy.hpBarFill.parent?.children.forEach((child) => {
+        if (child.position.y > 2.1) {
+          child.lookAt(this.camera.position);
+        }
+      });
+
+      if (enemy.state === 'dead') {
+        enemy.deathTimer -= dt;
+        const fallDir = enemy.id % 2 === 0 ? 1 : -1;
+        enemy.mesh.rotation.x = Math.max(-Math.PI / 2.1, enemy.mesh.rotation.x - dt * 3.8);
+        enemy.mesh.rotation.z = THREE.MathUtils.lerp(enemy.mesh.rotation.z, fallDir * 0.25, dt * 4);
+        enemy.mesh.position.y -= dt * 0.75;
+        if (enemy.deathTimer <= 0) {
+          this.scene.remove(enemy.mesh);
+          this.enemies.splice(i, 1);
+        }
+        continue;
+      }
+
+      if (enemy.hitFlashTimer > 0) {
+        enemy.hitFlashTimer = Math.max(0, enemy.hitFlashTimer - dt);
+      }
+      const stagger = enemy.hitFlashTimer / 0.24;
+
+      if (enemy.netX !== undefined && enemy.netZ !== undefined) {
+        enemy.mesh.position.x = THREE.MathUtils.lerp(enemy.mesh.position.x, enemy.netX, lerpPos);
+        enemy.mesh.position.z = THREE.MathUtils.lerp(enemy.mesh.position.z, enemy.netZ, lerpPos);
+      }
+      if (enemy.netYaw !== undefined) {
+        enemy.mesh.rotation.y = this.lerpAngle(enemy.mesh.rotation.y, enemy.netYaw, lerpPos);
+      }
+
+      enemy.walkCycle += dt * enemy.speed * 3.4;
+      const stride = Math.sin(enemy.walkCycle);
+      const doubleStep = Math.abs(Math.cos(enemy.walkCycle));
+
+      const baseGroundY =
+        enemy.netY !== undefined
+          ? enemy.netY
+          : this.sceneHelper.getFloorHeightAt(enemy.mesh.position.x, enemy.mesh.position.z);
+
+      enemy.mesh.position.y = baseGroundY + doubleStep * 0.055;
+      enemy.leftLeg.rotation.x = stride * 0.62;
+      enemy.rightLeg.rotation.x = -stride * 0.62;
+
+      enemy.bodyMesh.rotation.x = 0.18 + doubleStep * 0.06 - stagger * 0.65;
+      enemy.bodyMesh.rotation.y = stride * 0.18;
+      enemy.bodyMesh.rotation.z = Math.cos(enemy.walkCycle * 0.5) * 0.06;
+
+      const baseHeadTilt = (enemy.id % 2 === 0 ? 1 : -1) * 0.16;
+      enemy.headMesh.rotation.z = baseHeadTilt + Math.sin(enemy.walkCycle * 0.5) * 0.08;
+      enemy.headMesh.rotation.x = -0.08 + Math.sin(enemy.walkCycle) * 0.06 - stagger * 0.75;
+      enemy.headMesh.rotation.y = -stride * 0.12;
+
+      enemy.leftArm.rotation.x = -Math.PI / 2.5 + Math.cos(enemy.walkCycle) * 0.26 + stagger * 0.5;
+      enemy.rightArm.rotation.x = -Math.PI / 2.5 - Math.cos(enemy.walkCycle) * 0.26 + stagger * 0.5;
+    }
   }
 
   private resolveEnemyToEnemyCollisions(): void {
@@ -2744,15 +3353,17 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     let stepX = enemy.mesh.position.x + dir.x * enemy.speed * dt;
     let stepZ = enemy.mesh.position.z + dir.z * enemy.speed * dt;
 
-    // Prevent enemy from stepping inside the player's collision cylinder when on the same floor
-    if (Math.abs(this.playerGroundY - enemy.mesh.position.y) < 1.6) {
-      const minDist = this.getPlayerEnemyMinDist(enemy);
-      const dx = stepX - this.playerPos.x;
-      const dz = stepZ - this.playerPos.z;
-      const distToPlayer = Math.hypot(dx, dz);
-      if (distToPlayer < minDist && distToPlayer > 0.0001) {
-        stepX = this.playerPos.x + (dx / distToPlayer) * minDist;
-        stepZ = this.playerPos.z + (dz / distToPlayer) * minDist;
+    // Prevent enemy from stepping inside ANY player's collision cylinder when on the same floor
+    const minDist = this.getPlayerEnemyMinDist(enemy);
+    for (const p of this.getAllPlayerTargets()) {
+      if (Math.abs(p.groundY - enemy.mesh.position.y) < 1.6) {
+        const dx = stepX - p.x;
+        const dz = stepZ - p.z;
+        const distToPlayer = Math.hypot(dx, dz);
+        if (distToPlayer < minDist && distToPlayer > 0.0001) {
+          stepX = p.x + (dx / distToPlayer) * minDist;
+          stepZ = p.z + (dz / distToPlayer) * minDist;
+        }
       }
     }
 
@@ -2799,7 +3410,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   private damagePlayer(amount: number): void {
-    if (this.isGameOver()) return;
+    if (this.isGameOver() || this.isDowned()) return;
     this.lastDamageTime = performance.now();
     this.sound.playPlayerDamage();
     this.damageFlash.set(true);
@@ -2807,15 +3418,117 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
     const nextHp = this.health() - amount;
     if (nextHp <= 0) {
-      this.health.set(0);
-      this.isGameOver.set(true);
-      document.exitPointerLock?.();
+      // In Multiplayer Co-op, if at least 1 teammate is still standing, enter Downed (Revivable) state!
+      const hasStandingTeammates =
+        this.mp.isInRoom() &&
+        Array.from(this.remotePlayers.values()).some((p) => !p.isDowned);
+
+      if (hasStandingTeammates) {
+        this.health.set(1);
+        this.isDowned.set(true);
+        this.isAiming.set(false);
+        this.cancelReload();
+        this.bleedoutTimer = 45;
+        this.bleedoutRemainingSec.set(45);
+        this.showBanner('¡HAS CAÍDO! Un compañero puede revivirte manteniendo [F]');
+        this.mp.sendGameEvent({
+          type: 'player_downed',
+          playerId: this.mp.localPlayerId(),
+          playerName: this.mp.playerName()
+        });
+      } else {
+        this.triggerTeamGameOver(true);
+      }
     } else {
       this.health.set(nextHp);
     }
   }
 
+  private triggerTeamGameOver(broadcastToLan: boolean): void {
+    this.health.set(0);
+    this.isDowned.set(false);
+    this.isGameOver.set(true);
+    document.exitPointerLock?.();
+    if (broadcastToLan && this.mp.isInRoom()) {
+      this.mp.sendGameEvent({ type: 'game_over' });
+    }
+  }
+
+  private reviveLocalPlayer(reviverName?: string): void {
+    this.isDowned.set(false);
+    this.bleedoutTimer = 45;
+    this.bleedoutRemainingSec.set(45);
+    this.health.set(Math.min(100, this.maxHealth()));
+    this.sound.playPurchase();
+    if (reviverName) {
+      this.showBanner(`¡Revivido por ${reviverName}!`);
+    }
+  }
+
+  private updateDownedAndRevive(dt: number): void {
+    if (this.isDowned()) {
+      this.bleedoutTimer = Math.max(0, this.bleedoutTimer - dt);
+      const sec = Math.ceil(this.bleedoutTimer);
+      if (sec !== this.bleedoutRemainingSec()) {
+        this.bleedoutRemainingSec.set(sec);
+      }
+
+      // Check if all teammates also fell while we were downed
+      const anyStanding = Array.from(this.remotePlayers.values()).some((p) => !p.isDowned);
+      if (!anyStanding && this.remotePlayers.size > 0) {
+        this.triggerTeamGameOver(true);
+      }
+      return;
+    }
+
+    // Standing player: check if near a downed teammate to revive with [F]
+    let closestDowned: RemotePlayerState | null = null;
+    let minDist = Infinity;
+
+    for (const remote of this.remotePlayers.values()) {
+      if (!remote.isDowned) continue;
+      const d = Math.hypot(this.playerPos.x - remote.x, this.playerPos.z - remote.z);
+      const heightDiff = Math.abs(this.playerGroundY - (remote.y - 0.85));
+      if (d <= 2.65 && heightDiff <= 2.2 && d < minDist) {
+        minDist = d;
+        closestDowned = remote;
+      }
+    }
+
+    if (this.reviveTargetPlayer()?.id !== closestDowned?.id) {
+      this.reviveTargetPlayer.set(closestDowned);
+    }
+
+    if (closestDowned && this.keys['KeyF']) {
+      const reviveDuration = this.hasPerk('lembas_bread') ? 1.25 : 2.1;
+      this.reviveHoldTimer += dt;
+      const pct = Math.min(100, Math.round((this.reviveHoldTimer / reviveDuration) * 100));
+      if (pct !== this.reviveProgress()) {
+        this.reviveProgress.set(pct);
+      }
+
+      if (this.reviveHoldTimer >= reviveDuration) {
+        this.reviveHoldTimer = 0;
+        this.reviveProgress.set(0);
+        closestDowned.isDowned = false;
+        closestDowned.health = 100;
+        this.sound.playPurchase();
+        this.awardPoints(150, true);
+        this.showBanner(`¡Has revivido a ${closestDowned.name}! (+150 pts)`);
+        this.mp.sendGameEvent({
+          type: 'player_revive',
+          targetPlayerId: closestDowned.id,
+          reviverName: this.mp.playerName()
+        });
+      }
+    } else if (this.reviveHoldTimer > 0) {
+      this.reviveHoldTimer = 0;
+      this.reviveProgress.set(0);
+    }
+  }
+
   private updateHealthRegen(dt: number): void {
+    if (this.isDowned()) return;
     if (this.health() < this.maxHealth() && performance.now() - this.lastDamageTime > 4000) {
       this.health.update((h) => Math.min(this.maxHealth(), Math.round(h + 28 * dt)));
     }
@@ -2880,8 +3593,16 @@ export class AppComponent implements AfterViewInit, OnDestroy {
         this.playerPos.z - orb.position.z
       );
       const heightDiff = Math.abs(this.playerGroundY + 1.0 - orb.position.y);
-      if (dist2D < 1.65 && heightDiff < 2.0) {
+      if (!this.isDowned() && dist2D < 1.65 && heightDiff < 2.0) {
         this.activatePowerUp(orb.type, orb.name);
+        if (this.mp.isInRoom()) {
+          this.mp.sendGameEvent({
+            type: 'powerup_pickup',
+            orbId: orb.id,
+            orbType: orb.type,
+            name: orb.name
+          });
+        }
         this.scene.remove(orb.mesh);
         this.powerUpOrbs.splice(i, 1);
         continue;
@@ -2899,6 +3620,13 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       if ((item.type === 'perk' || item.type === 'pack_a_punch') && item.mesh) {
         item.mesh.rotation.y += dt * 1.4;
       }
+    }
+
+    if (this.isDowned() || this.reviveTargetPlayer()) {
+      if (this.activeInteractable() !== null) {
+        this.activeInteractable.set(null);
+      }
+      return;
     }
 
     let closest: InteractableItem | null = null;
@@ -2945,6 +3673,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
           win.planks++;
           this.sound.playRepairPlank();
 
+          if (this.mp.isInRoom()) {
+            this.mp.sendGameEvent({
+              type: 'window_repair',
+              windowId: win.id,
+              planks: win.planks
+            });
+          }
+
           const maxRepairPointsForRound = 50 + this.round() * 40;
           if (this.repairedPointsThisRound < maxRepairPointsForRound) {
             this.repairedPointsThisRound += 10;
@@ -2955,6 +3691,555 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     } else if (this.repairHoldTimer > 0) {
       this.repairHoldTimer = 0;
       this.repairProgress.set(0);
+    }
+  }
+
+  // ===========================================================================
+  // REAL-TIME LAN MULTIPLAYER SYNCHRONIZATION (PLAYERS, AVATARS & WORLD STATE)
+  // ===========================================================================
+  private lerpAngle(current: number, target: number, t: number): number {
+    let diff = ((target - current + Math.PI) % (Math.PI * 2)) - Math.PI;
+    if (diff < -Math.PI) diff += Math.PI * 2;
+    return current + diff * t;
+  }
+
+  private syncRoomRosterAvatars(room: LanRoomSummary): void {
+    if (!this.scene || !this.sceneHelper) return;
+    const myId = this.mp.localPlayerId();
+    const activeIds = new Set<string>();
+
+    for (const p of room.players) {
+      if (p.id === myId) continue;
+      activeIds.add(p.id);
+
+      let state = this.remotePlayers.get(p.id);
+      if (!state) {
+        const spawn = this.getSpawnPosForSlot(p.slotIndex);
+        const hero = this.mp.getHeroPreset(p.heroId);
+        const avatar = this.sceneHelper.buildRemotePlayerAvatar(hero, p.name);
+        avatar.group.position.set(spawn.x, spawn.y - 1.75, spawn.z);
+        this.scene.add(avatar.group);
+
+        state = {
+          id: p.id,
+          name: p.name,
+          heroId: p.heroId,
+          color: hero.color,
+          slotIndex: p.slotIndex,
+          isHost: p.isHost,
+          x: spawn.x,
+          y: spawn.y,
+          z: spawn.z,
+          targetX: spawn.x,
+          targetY: spawn.y,
+          targetZ: spawn.z,
+          yaw: 0,
+          pitch: 0,
+          targetYaw: 0,
+          targetPitch: 0,
+          health: 100,
+          maxHealth: 100,
+          points: 500,
+          kills: 0,
+          headshots: 0,
+          weaponId: 'lorien_bow',
+          weaponUpgraded: false,
+          weaponName: 'Arco de Lothlórien',
+          isMoving: false,
+          isSprinting: false,
+          isAiming: false,
+          isDowned: false,
+          bleedoutTimer: 45,
+          reviveProgress: 0,
+          walkCycle: 0,
+          attackRecoilTimer: 0,
+          hitFlashTimer: 0,
+          roomName: 'SALA I · CÁMARA DE MAZARBUL',
+          floorLabel: 'NIVEL BASE (0.0m)',
+          lastUpdateMs: performance.now(),
+          avatar
+        };
+        this.remotePlayers.set(p.id, state);
+      } else {
+        state.name = p.name;
+        state.heroId = p.heroId;
+        state.isHost = p.isHost;
+        state.slotIndex = p.slotIndex;
+      }
+    }
+
+    // Remove avatars of players who left
+    for (const [id, rem] of this.remotePlayers.entries()) {
+      if (!activeIds.has(id)) {
+        if (rem.avatar) {
+          this.scene.remove(rem.avatar.group);
+        }
+        this.remotePlayers.delete(id);
+      }
+    }
+  }
+
+  private updateRemotePlayers(dt: number): void {
+    if (this.remotePlayers.size === 0) return;
+    const lerpFactor = Math.min(1, dt * 16);
+
+    for (const remote of this.remotePlayers.values()) {
+      remote.x = THREE.MathUtils.lerp(remote.x, remote.targetX, lerpFactor);
+      remote.y = THREE.MathUtils.lerp(remote.y, remote.targetY, lerpFactor);
+      remote.z = THREE.MathUtils.lerp(remote.z, remote.targetZ, lerpFactor);
+      remote.yaw = this.lerpAngle(remote.yaw, remote.targetYaw, lerpFactor);
+      remote.pitch = THREE.MathUtils.lerp(remote.pitch, remote.targetPitch, lerpFactor);
+
+      if (remote.avatar) {
+        this.sceneHelper.updateRemotePlayerAvatar(
+          remote.avatar,
+          remote,
+          this.camera.position,
+          dt
+        );
+      }
+    }
+  }
+
+  private broadcastMultiplayerState(now: number): void {
+    if (!this.mp.isInRoom() || !this.gameStarted()) return;
+
+    // 1. Broadcast local player state at 25 Hz (every 40ms)
+    if (now - this.lastPlayerBroadcastMs >= 40) {
+      this.lastPlayerBroadcastMs = now;
+      const w = this.currentWeapon();
+      this.mp.sendGameEvent({
+        type: 'player_state',
+        id: this.mp.localPlayerId(),
+        name: this.mp.playerName(),
+        heroId: this.mp.selectedHeroId(),
+        color: this.mp.getHeroPreset(this.mp.selectedHeroId()).color,
+        slotIndex: this.mp.localSlotIndex(),
+        isHost: this.mp.isHost(),
+        x: Number(this.playerPos.x.toFixed(3)),
+        y: Number(this.playerPos.y.toFixed(3)),
+        z: Number(this.playerPos.z.toFixed(3)),
+        yaw: Number(this.yaw.toFixed(3)),
+        pitch: Number(this.pitch.toFixed(3)),
+        health: this.health(),
+        maxHealth: this.maxHealth(),
+        points: this.points(),
+        kills: this.kills(),
+        headshots: this.headshots(),
+        weaponId: w.id,
+        weaponUpgraded: w.isUpgraded,
+        weaponName: w.name,
+        isMoving: this.isLocalMoving,
+        isSprinting: this.isLocalSprinting,
+        isAiming: this.isAiming(),
+        isDowned: this.isDowned(),
+        bleedoutTimer: Math.ceil(this.bleedoutTimer),
+        roomName: this.currentRoomName(),
+        floorLabel: this.currentFloorLabel()
+      });
+    }
+
+    // 2. If authoritative Host, broadcast world & enemy snapshot at 20 Hz (every 50ms)
+    if (this.isAuthoritativeHost() && now - this.lastWorldSnapshotMs >= 50) {
+      this.lastWorldSnapshotMs = now;
+      const enemySnapshots: NetworkEnemySnapshot[] = [];
+      for (const e of this.enemies) {
+        if (e.state === 'dead') continue;
+        enemySnapshots.push({
+          id: e.id,
+          type: e.type,
+          hp: e.hp,
+          maxHp: e.maxHp,
+          speed: e.speed,
+          state: e.state,
+          targetWindowId: e.targetWindowId,
+          targetPlayerId: e.targetPlayerId,
+          x: Number(e.mesh.position.x.toFixed(2)),
+          y: Number(e.mesh.position.y.toFixed(2)),
+          z: Number(e.mesh.position.z.toFixed(2)),
+          yaw: Number(e.mesh.rotation.y.toFixed(2))
+        });
+      }
+
+      this.mp.sendGameEvent({
+        type: 'world_snapshot',
+        round: this.round(),
+        enemiesRemaining: this.enemiesRemaining(),
+        unlockedDoors: this.unlockedDoors(),
+        windowPlanks: this.windows.map((w) => ({ id: w.id, planks: w.planks })),
+        enemies: enemySnapshots
+      });
+    }
+  }
+
+  private handleMultiplayerPacket(msg: any): void {
+    if (!msg || typeof msg.type !== 'string') return;
+
+    switch (msg.type) {
+      case 'room_joined': {
+        if (msg.room) {
+          this.syncRoomRosterAvatars(msg.room);
+          // If joining a match that is already in 'playing' state, launch right in!
+          if (msg.room.state === 'playing' && !this.gameStarted()) {
+            this.ngZone.run(() => {
+              this.startGame(true);
+            });
+          }
+        }
+        break;
+      }
+
+      case 'room_updated': {
+        if (msg.room) {
+          this.syncRoomRosterAvatars(msg.room);
+          if (msg.joinedPlayer && this.gameStarted()) {
+            this.showBanner(`⚔ ${msg.joinedPlayer.name} se ha unido a la Compañía ⚔`);
+          }
+        }
+        break;
+      }
+
+      case 'host_promoted': {
+        if (this.gameStarted()) {
+          this.showBanner('👑 Ahora eres el Anfitrión (Host) de la Partida');
+        }
+        break;
+      }
+
+      case 'match_started':
+      case 'restart_match': {
+        if (msg.startRound !== undefined) this.devStartRound.set(msg.startRound);
+        if (msg.freeDoors !== undefined) this.devFreeDoors.set(Boolean(msg.freeDoors));
+        if (msg.bonusPoints !== undefined) this.devBonusPoints.set(Boolean(msg.bonusPoints));
+        if (!this.mp.isHost() || msg.type === 'restart_match') {
+          this.ngZone.run(() => {
+            this.startGame(true);
+          });
+        }
+        break;
+      }
+
+      case 'player_state': {
+        if (!msg.id || msg.id === this.mp.localPlayerId()) return;
+        let rem = this.remotePlayers.get(msg.id);
+        if (!rem) {
+          const hero = this.mp.getHeroPreset(msg.heroId);
+          const avatar = this.sceneHelper.buildRemotePlayerAvatar(hero, msg.name || 'Aliado');
+          avatar.group.position.set(msg.x || 0, (msg.y || 1.75) - 1.75, msg.z || 6.2);
+          this.scene.add(avatar.group);
+          rem = {
+            id: msg.id,
+            name: msg.name || 'Aliado',
+            heroId: msg.heroId || 'legolas',
+            color: hero.color,
+            slotIndex: msg.slotIndex ?? 1,
+            isHost: Boolean(msg.isHost),
+            x: msg.x ?? 0,
+            y: msg.y ?? 1.75,
+            z: msg.z ?? 6.2,
+            targetX: msg.x ?? 0,
+            targetY: msg.y ?? 1.75,
+            targetZ: msg.z ?? 6.2,
+            yaw: msg.yaw ?? 0,
+            pitch: msg.pitch ?? 0,
+            targetYaw: msg.yaw ?? 0,
+            targetPitch: msg.pitch ?? 0,
+            health: msg.health ?? 100,
+            maxHealth: msg.maxHealth ?? 100,
+            points: msg.points ?? 500,
+            kills: msg.kills ?? 0,
+            headshots: msg.headshots ?? 0,
+            weaponId: msg.weaponId || 'lorien_bow',
+            weaponUpgraded: Boolean(msg.weaponUpgraded),
+            weaponName: msg.weaponName || 'Arco de Lothlórien',
+            isMoving: Boolean(msg.isMoving),
+            isSprinting: Boolean(msg.isSprinting),
+            isAiming: Boolean(msg.isAiming),
+            isDowned: Boolean(msg.isDowned),
+            bleedoutTimer: msg.bleedoutTimer ?? 45,
+            reviveProgress: 0,
+            walkCycle: 0,
+            attackRecoilTimer: 0,
+            hitFlashTimer: 0,
+            roomName: msg.roomName || 'SALA I',
+            floorLabel: msg.floorLabel || '0.0m',
+            lastUpdateMs: performance.now(),
+            avatar
+          };
+          this.remotePlayers.set(msg.id, rem);
+        } else {
+          rem.name = msg.name || rem.name;
+          rem.targetX = msg.x ?? rem.targetX;
+          rem.targetY = msg.y ?? rem.targetY;
+          rem.targetZ = msg.z ?? rem.targetZ;
+          rem.targetYaw = msg.yaw ?? rem.targetYaw;
+          rem.targetPitch = msg.pitch ?? rem.targetPitch;
+          rem.health = msg.health ?? rem.health;
+          rem.maxHealth = msg.maxHealth ?? rem.maxHealth;
+          rem.points = msg.points ?? rem.points;
+          rem.kills = msg.kills ?? rem.kills;
+          rem.headshots = msg.headshots ?? rem.headshots;
+          rem.weaponId = msg.weaponId || rem.weaponId;
+          rem.weaponUpgraded = Boolean(msg.weaponUpgraded);
+          rem.weaponName = msg.weaponName || rem.weaponName;
+          rem.isMoving = Boolean(msg.isMoving);
+          rem.isSprinting = Boolean(msg.isSprinting);
+          rem.isAiming = Boolean(msg.isAiming);
+          rem.isDowned = Boolean(msg.isDowned);
+          rem.bleedoutTimer = msg.bleedoutTimer ?? rem.bleedoutTimer;
+          rem.roomName = msg.roomName || rem.roomName;
+          rem.floorLabel = msg.floorLabel || rem.floorLabel;
+          rem.lastUpdateMs = performance.now();
+        }
+        break;
+      }
+
+      case 'player_shoot': {
+        const shooter = this.remotePlayers.get(msg.senderId);
+        if (shooter) {
+          shooter.attackRecoilTimer = 1.0;
+        }
+        const weaponCfg = this.createWeaponConfig(msg.weaponId || 'lorien_bow');
+        weaponCfg.isUpgraded = Boolean(msg.isUpgraded);
+        const startPos = new THREE.Vector3(msg.x || 0, msg.y || 1.6, msg.z || 0);
+        const dir = new THREE.Vector3(msg.dx || 0, msg.dy || 0, msg.dz || -1).normalize();
+        this.spawnRemotePlayerBolt(startPos, dir, weaponCfg);
+        break;
+      }
+
+      case 'world_snapshot': {
+        if (!this.isAuthoritativeHost() && this.gameStarted()) {
+          this.applyWorldSnapshotFromHost(msg);
+        }
+        break;
+      }
+
+      case 'enemy_hit': {
+        const enemy = this.enemies.find((e) => e.id === msg.enemyId);
+        if (enemy) {
+          this.applyEnemyDamage(
+            enemy,
+            Number(msg.damage) || 50,
+            Boolean(msg.isHeadshot),
+            true,
+            msg.attackerId || msg.senderId
+          );
+        }
+        break;
+      }
+
+      case 'door_unlock': {
+        if (msg.doorId && !this.isDoorUnlocked(msg.doorId)) {
+          this.unlockDoor(msg.doorId, msg.title, false, false);
+          this.sound.playPurchase();
+          this.showBanner(
+            `${msg.openerName || 'Un aliado'} abrió: ${msg.title || 'Acceso'}`
+          );
+        }
+        break;
+      }
+
+      case 'window_repair': {
+        const win = this.windows.find((w) => w.id === msg.windowId);
+        if (win && typeof msg.planks === 'number') {
+          win.planks = Math.max(0, Math.min(win.maxPlanks, msg.planks));
+          win.plankMeshes.forEach((m, idx) => {
+            m.visible = idx < win.planks;
+          });
+        }
+        break;
+      }
+
+      case 'powerup_spawn': {
+        this.spawnPowerUpOrbVisual(
+          msg.orbId,
+          msg.orbType,
+          msg.name,
+          msg.color,
+          msg.x,
+          msg.y,
+          msg.z
+        );
+        break;
+      }
+
+      case 'powerup_pickup': {
+        const idx = this.powerUpOrbs.findIndex((o) => o.id === msg.orbId);
+        if (idx !== -1) {
+          this.scene.remove(this.powerUpOrbs[idx].mesh);
+          this.powerUpOrbs.splice(idx, 1);
+        }
+        if (msg.orbType && msg.name) {
+          this.activatePowerUp(msg.orbType, msg.name);
+        }
+        break;
+      }
+
+      case 'round_change': {
+        if (!this.isAuthoritativeHost() && typeof msg.round === 'number') {
+          this.enemiesRemaining.set(msg.enemiesRemaining ?? 10);
+          this.startRound(msg.round, false);
+        }
+        break;
+      }
+
+      case 'player_damaged': {
+        if (msg.targetPlayerId === this.mp.localPlayerId()) {
+          this.damagePlayer(Number(msg.damage) || 28);
+        }
+        break;
+      }
+
+      case 'player_downed': {
+        const rem = this.remotePlayers.get(msg.playerId || msg.senderId);
+        if (rem) {
+          rem.isDowned = true;
+        }
+        if (msg.playerName) {
+          this.showBanner(`⚠ ¡${msg.playerName} ha caído! Acércate y mantén [F] para revivirlo`);
+        }
+        break;
+      }
+
+      case 'player_revive': {
+        if (msg.targetPlayerId === this.mp.localPlayerId()) {
+          this.reviveLocalPlayer(msg.reviverName || 'Un compañero');
+        } else {
+          const rem = this.remotePlayers.get(msg.targetPlayerId);
+          if (rem) {
+            rem.isDowned = false;
+            rem.health = 100;
+          }
+        }
+        break;
+      }
+
+      case 'game_over': {
+        this.triggerTeamGameOver(false);
+        break;
+      }
+    }
+  }
+
+  private spawnRemotePlayerBolt(
+    startPos: THREE.Vector3,
+    dir: THREE.Vector3,
+    weapon: WeaponConfig
+  ): void {
+    const isOrb = weapon.splashRadius > 0;
+    const color = weapon.isUpgraded
+      ? weapon.upgradedProjectileColor
+      : weapon.projectileColor;
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const mesh = new THREE.Mesh(isOrb ? this.sharedOrbGeo : this.sharedBoltGeo, mat);
+    mesh.position.copy(startPos).addScaledVector(dir, 0.55);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+    this.scene.add(mesh);
+
+    this.projectiles.push({
+      mesh,
+      velocity: dir.clone().multiplyScalar(weapon.projectileSpeed),
+      life: 0.55,
+      isUpgraded: false,
+      materials: [mat]
+    });
+  }
+
+  private applyWorldSnapshotFromHost(msg: any): void {
+    if (typeof msg.enemiesRemaining === 'number') {
+      this.enemiesRemaining.set(msg.enemiesRemaining);
+    }
+
+    if (Array.isArray(msg.unlockedDoors)) {
+      for (const dId of msg.unlockedDoors as DoorId[]) {
+        if (!this.isDoorUnlocked(dId)) {
+          this.unlockDoor(dId, undefined, false, false);
+        }
+      }
+    }
+
+    if (Array.isArray(msg.windowPlanks)) {
+      for (const wp of msg.windowPlanks) {
+        const win = this.windows.find((w) => w.id === wp.id);
+        if (win && win.planks !== wp.planks) {
+          win.planks = wp.planks;
+          win.plankMeshes.forEach((m, idx) => {
+            m.visible = idx < win.planks;
+          });
+        }
+      }
+    }
+
+    if (!Array.isArray(msg.enemies)) return;
+    const incomingList = msg.enemies as NetworkEnemySnapshot[];
+    const seenIds = new Set<number>();
+
+    for (const snap of incomingList) {
+      seenIds.add(snap.id);
+      let existing = this.enemies.find((e) => e.id === snap.id);
+
+      if (!existing) {
+        const enemyMeshData = this.sceneHelper.buildSculptedOrcMesh(snap.type);
+        enemyMeshData.group.position.set(snap.x, snap.y, snap.z);
+        enemyMeshData.group.rotation.y = snap.yaw;
+        this.scene.add(enemyMeshData.group);
+
+        existing = {
+          id: snap.id,
+          type: snap.type,
+          name:
+            snap.type === 'uruk'
+              ? 'Berserker Uruk-hai'
+              : snap.type === 'orc'
+              ? 'Orco de Mordor'
+              : 'Trasgo de Moria',
+          mesh: enemyMeshData.group,
+          headMesh: enemyMeshData.head,
+          bodyMesh: enemyMeshData.body,
+          leftArm: enemyMeshData.leftArm,
+          rightArm: enemyMeshData.rightArm,
+          leftLeg: enemyMeshData.leftLeg,
+          rightLeg: enemyMeshData.rightLeg,
+          hpBarFill: enemyMeshData.hpFill,
+          hp: snap.hp,
+          maxHp: snap.maxHp,
+          speed: snap.speed,
+          damage: snap.type === 'uruk' ? 42 : 28,
+          state: snap.state,
+          targetWindowId: snap.targetWindowId,
+          targetPlayerId: snap.targetPlayerId,
+          barrierAttackTimer: 0,
+          playerAttackTimer: 0,
+          walkCycle: Math.random() * Math.PI * 2,
+          hitFlashTimer: 0,
+          deathTimer: 0,
+          netX: snap.x,
+          netY: snap.y,
+          netZ: snap.z,
+          netYaw: snap.yaw
+        };
+        this.enemies.push(existing);
+      } else if (existing.state !== 'dead') {
+        existing.hp = snap.hp;
+        existing.maxHp = snap.maxHp;
+        existing.speed = snap.speed;
+        existing.state = snap.state;
+        existing.targetPlayerId = snap.targetPlayerId;
+        existing.netX = snap.x;
+        existing.netY = snap.y;
+        existing.netZ = snap.z;
+        existing.netYaw = snap.yaw;
+        const ratio = Math.max(0.01, existing.hp / Math.max(1, existing.maxHp));
+        existing.hpBarFill.scale.x = ratio;
+      }
+    }
+
+    // Any enemy no longer in the Host's alive list transitions to dead animation
+    for (const enemy of this.enemies) {
+      if (enemy.state !== 'dead' && !seenIds.has(enemy.id)) {
+        enemy.state = 'dead';
+        enemy.deathTimer = 0.65;
+      }
     }
   }
 }
