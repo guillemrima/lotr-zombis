@@ -75,8 +75,13 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
   // Reactive HUD State (Angular Signals)
   readonly gameStarted = signal(false);
+  readonly isLoadingMap = signal(false);
+  readonly isFadingFromBlack = signal(false);
   readonly isPaused = signal(false);
   readonly isGameOver = signal(false);
+
+  private loadingTimerId: ReturnType<typeof setTimeout> | null = null;
+  private fadeTimerId: ReturnType<typeof setTimeout> | null = null;
 
   // Main Menu & Map Selector State
   readonly currentMenuScreen = signal<'main' | 'map-select' | 'settings' | 'guide'>('main');
@@ -88,6 +93,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       title: 'KHAZAD-DÛM',
       subtitle: 'The Mines of Moria',
       image: 'assets/maps/khazad-dum.jpg',
+      loadingImage: 'assets/maps/khazad-dum-loading.jpg',
       available: true,
       tag: 'DISPONIBLE',
       tagClass: 'available',
@@ -386,6 +392,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearTransitionTimers();
     cancelAnimationFrame(this.animationFrameId);
     document.removeEventListener('mousemove', this.onMouseMoveBound);
     if (this.renderer) {
@@ -511,10 +518,24 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.sound.playMenuHover();
   }
 
+  private clearTransitionTimers(): void {
+    if (this.loadingTimerId !== null) {
+      clearTimeout(this.loadingTimerId);
+      this.loadingTimerId = null;
+    }
+    if (this.fadeTimerId !== null) {
+      clearTimeout(this.fadeTimerId);
+      this.fadeTimerId = null;
+    }
+  }
+
   quitToMainMenu(): void {
+    this.clearTransitionTimers();
     if (document.pointerLockElement) {
       document.exitPointerLock?.();
     }
+    this.isLoadingMap.set(false);
+    this.isFadingFromBlack.set(false);
     this.gameStarted.set(false);
     this.isPaused.set(false);
     this.isGameOver.set(false);
@@ -560,7 +581,42 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   }
 
   startGame(): void {
+    if (this.isLoadingMap()) return;
+
+    this.clearTransitionTimers();
     this.sound.playMenuLaunch();
+    this.lockPointer();
+
+    // If launching from the Main Menu / Map Selector, show the 3-second Map Loading Screen
+    // followed by a 1-second Fade-In from Black when the match begins.
+    if (!this.gameStarted()) {
+      this.isLoadingMap.set(true);
+      this.loadingTimerId = setTimeout(() => {
+        this.loadingTimerId = null;
+        this.isLoadingMap.set(false);
+        this.triggerFadeFromBlack();
+        this.launchMatchNow();
+      }, 3000);
+      return;
+    }
+
+    // In-game restart (Pause / Game Over)
+    this.triggerFadeFromBlack();
+    this.launchMatchNow();
+  }
+
+  private triggerFadeFromBlack(): void {
+    this.isFadingFromBlack.set(true);
+    if (this.fadeTimerId !== null) {
+      clearTimeout(this.fadeTimerId);
+    }
+    this.fadeTimerId = setTimeout(() => {
+      this.fadeTimerId = null;
+      this.isFadingFromBlack.set(false);
+    }, 1000);
+  }
+
+  private launchMatchNow(): void {
     const initialRound = Math.max(1, Math.min(99, Math.floor(this.devStartRound() || 1)));
     this.devStartRound.set(initialRound);
 
@@ -630,7 +686,6 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     }
 
     this.clock.getDelta();
-    this.lockPointer();
     this.startRound(initialRound);
   }
 
@@ -657,7 +712,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private setupPointerLockListener(): void {
     document.addEventListener('pointerlockchange', () => {
       const locked = document.pointerLockElement === this.canvasRef.nativeElement;
-      if (!locked && this.gameStarted() && !this.isGameOver()) {
+      if (!locked && this.gameStarted() && !this.isLoadingMap() && !this.isGameOver()) {
         this.isPaused.set(true);
         this.keys = {};
         this.isMouseDown = false;
@@ -1053,7 +1108,7 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     this.keys[code] = true;
 
     if (!this.gameStarted()) {
-      if (e.repeat) return;
+      if (e.repeat || this.isLoadingMap()) return;
       if (code === 'Escape' && this.currentMenuScreen() !== 'main') {
         this.openMenuScreen('main');
       } else if (this.currentMenuScreen() === 'map-select') {

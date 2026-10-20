@@ -494,9 +494,47 @@
   }
 
   <!-- ===================================================================== -->
+  <!-- 1-SECOND FADE-IN FROM BLACK OVERLAY (WHEN MATCH STARTS)               -->
+  <!-- ===================================================================== -->
+  @if (isFadingFromBlack()) {
+    <div class="fade-from-black-overlay"></div>
+  }
+
+  <!-- ===================================================================== -->
+  <!-- 3-SECOND FULL-SCREEN ZOMBIES MAP LOADING SCREEN                       -->
+  <!-- ===================================================================== -->
+  @if (isLoadingMap()) {
+    <div class="map-loading-screen">
+      <img
+        [src]="selectedMap().loadingImage || selectedMap().image || 'assets/maps/khazad-dum-loading.jpg'"
+        [alt]="selectedMap().title"
+        class="map-loading-bg"
+      />
+      <div class="map-loading-vignette"></div>
+
+      <div class="map-loading-footer">
+        <div class="map-loading-info">
+          <div class="map-loading-loc">{{ selectedMap().location }}</div>
+          <h1 class="map-loading-title">{{ selectedMap().title }}</h1>
+          <p class="map-loading-quote">{{ selectedMap().loreQuote }}</p>
+        </div>
+
+        <div class="map-loading-status">
+          <div class="loading-spinner-ring"></div>
+          <span>CARGANDO PARTIDA...</span>
+        </div>
+      </div>
+
+      <div class="map-loading-progress-track">
+        <div class="map-loading-progress-fill"></div>
+      </div>
+    </div>
+  }
+
+  <!-- ===================================================================== -->
   <!-- MAIN MENU & BLACK OPS 3 STYLE MAP SELECTOR                            -->
   <!-- ===================================================================== -->
-  @if (!gameStarted()) {
+  @if (!gameStarted() && !isLoadingMap()) {
     <div class="cod-menu-screen" [class.bo3-mode]="currentMenuScreen() === 'map-select'">
       <!-- Ambient Backdrop -->
       <div class="cod-menu-backdrop"></div>

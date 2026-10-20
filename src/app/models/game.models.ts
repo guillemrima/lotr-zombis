@@ -125,6 +125,7 @@ export interface GameMapInfo {
   title: string;
   subtitle: string;
   image: string;
+  loadingImage?: string;
   available: boolean;
   tag: string;
   tagClass: 'available' | 'locked' | 'soon';
