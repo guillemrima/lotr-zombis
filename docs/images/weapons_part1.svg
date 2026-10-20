@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 480" width="100%" height="100%">
+  <defs>
+    <linearGradient id="wCardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0b1120" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ca8a04" />
+      <stop offset="50%" stop-color="#fef08a" />
+      <stop offset="100%" stop-color="#a16207" />
+    </linearGradient>
+    <linearGradient id="bowArtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#082f49" />
+    </linearGradient>
+    <linearGradient id="crossArtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b45309" />
+      <stop offset="100%" stop-color="#451a03" />
+    </linearGradient>
+    <linearGradient id="staffArtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b91c1c" />
+      <stop offset="100%" stop-color="#450a0a" />
+    </linearGradient>
+    <filter id="shadowW">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <rect width="1100" height="480" fill="#070a12" rx="16" />
+
+  <!-- Title -->
+  <text x="550" y="42" text-anchor="middle" font-family="'Cinzel', 'Georgia', serif" font-size="22" font-weight="bold" fill="url(#goldGrad)" letter-spacing="4">
+    ARSENAL DE LA TIERRA MEDIA · PARTE I
+  </text>
+  <text x="550" y="64" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="12" fill="#94a3b8" letter-spacing="1">
+    ARMAS A DISTANCIA Y MÍSTICAS DE INFANTERÍA
+  </text>
+
+  <!-- ========================================== -->
+  <!-- WEAPON 1: ARCO DE LOTHLÓRIEN -->
+  <!-- ========================================== -->
+  <g transform="translate(45, 85)" filter="url(#shadowW)">
+    <rect width="310" height="365" fill="url(#wCardBg)" stroke="#38bdf8" stroke-width="1.5" rx="12" />
+    <!-- Art Header -->
+    <rect x="1" y="1" width="308" height="90" fill="url(#bowArtGrad)" rx="11" />
+    <!-- Stylized Bow Icon -->
+    <path d="M 125 70 C 135 25, 175 25, 185 70" stroke="#facc15" stroke-width="4" fill="none" />
+    <line x1="125" y1="70" x2="185" y2="70" stroke="#bae6fd" stroke-width="1.5" stroke-dasharray="2,2" />
+    <line x1="155" y1="75" x2="155" y2="30" stroke="#38bdf8" stroke-width="2.5" />
+    <path d="M 152 35 L 155 25 L 158 35 Z" fill="#38bdf8" />
+
+    <!-- Name & Subtitle -->
+    <text x="155" y="118" text-anchor="middle" font-family="'Cinzel', serif" font-size="15" font-weight="bold" fill="#38bdf8">
+      ARCO DE LOTHLÓRIEN
+    </text>
+    <text x="155" y="134" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" fill="#94a3b8">
+      Arma Inicial · Cadencia media
+    </text>
+
+    <!-- Upgraded Pack a Punch Name -->
+    <rect x="25" y="145" width="260" height="24" fill="#1e1b4b" stroke="#facc15" stroke-width="1" rx="4" />
+    <text x="155" y="161" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#fef08a">
+      ⚡ Mejora: Estrella de Galadhrim
+    </text>
+
+    <!-- Stats -->
+    <g transform="translate(25, 185)">
+      <text y="12" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Daño por impacto</text>
+      <text x="260" y="12" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#38bdf8">55 PTS</text>
+      <rect y="17" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="17" width="95" height="5" fill="#38bdf8" rx="2.5" />
+
+      <text y="38" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Cadencia de fuego</text>
+      <text x="260" y="38" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#38bdf8">420 ms</text>
+      <rect y="43" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="43" width="135" height="5" fill="#38bdf8" rx="2.5" />
+
+      <text y="64" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Cargador / Reserva</text>
+      <text x="260" y="64" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#38bdf8">12 / 84 flechas</text>
+      <rect y="69" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="69" width="110" height="5" fill="#38bdf8" rx="2.5" />
+
+      <text y="90" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Tiempo de recarga</text>
+      <text x="260" y="90" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#4ade80">1.2 s (Rápido)</text>
+      <rect y="95" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="95" width="180" height="5" fill="#4ade80" rx="2.5" />
+    </g>
+
+    <!-- Source tag -->
+    <rect x="25" y="310" width="260" height="28" fill="#0f172a" rx="4" />
+    <text x="155" y="328" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      📍 <tspan fill="#e2e8f0" font-weight="600">Arma Inicial</tspan> / Muro Mazarbul (500 pts)
+    </text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- WEAPON 2: BALLESTA DE EREBOR -->
+  <!-- ========================================== -->
+  <g transform="translate(395, 85)" filter="url(#shadowW)">
+    <rect width="310" height="365" fill="url(#wCardBg)" stroke="#f59e0b" stroke-width="1.5" rx="12" />
+    <!-- Art Header -->
+    <rect x="1" y="1" width="308" height="90" fill="url(#crossArtGrad)" rx="11" />
+    <!-- Stylized Crossbow Icon -->
+    <line x1="120" y1="45" x2="190" y2="45" stroke="#d97706" stroke-width="4" />
+    <line x1="155" y1="35" x2="155" y2="75" stroke="#78350f" stroke-width="5" />
+    <path d="M 120 45 L 155 70 L 190 45" stroke="#fef08a" stroke-width="1.5" fill="none" />
+    <polygon points="152,32 155,22 158,32" fill="#f59e0b" />
+
+    <!-- Name & Subtitle -->
+    <text x="155" y="118" text-anchor="middle" font-family="'Cinzel', serif" font-size="15" font-weight="bold" fill="#f59e0b">
+      BALLESTA DE EREBOR
+    </text>
+    <text x="155" y="134" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" fill="#94a3b8">
+      Disparo en Abanico (3 virotes)
+    </text>
+
+    <!-- Upgraded Pack a Punch Name -->
+    <rect x="25" y="145" width="260" height="24" fill="#451a03" stroke="#f59e0b" stroke-width="1" rx="4" />
+    <text x="155" y="161" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#fed7aa">
+      ⚡ Mejora: Ira de Thorin
+    </text>
+
+    <!-- Stats -->
+    <g transform="translate(25, 185)">
+      <text y="12" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Daño por impacto</text>
+      <text x="260" y="12" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#f59e0b">65 × 3 = 195 PTS</text>
+      <rect y="17" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="17" width="165" height="5" fill="#f59e0b" rx="2.5" />
+
+      <text y="38" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Cadencia de fuego</text>
+      <text x="260" y="38" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#f59e0b">620 ms</text>
+      <rect y="43" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="43" width="95" height="5" fill="#f59e0b" rx="2.5" />
+
+      <text y="64" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Cargador / Reserva</text>
+      <text x="260" y="64" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#f59e0b">8 / 64 virotes</text>
+      <rect y="69" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="69" width="85" height="5" fill="#f59e0b" rx="2.5" />
+
+      <text y="90" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Tiempo de recarga</text>
+      <text x="260" y="90" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#facc15">1.5 s</text>
+      <rect y="95" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="95" width="140" height="5" fill="#facc15" rx="2.5" />
+    </g>
+
+    <!-- Source tag -->
+    <rect x="25" y="310" width="260" height="28" fill="#0f172a" rx="4" />
+    <text x="155" y="328" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      📍 <tspan fill="#e2e8f0" font-weight="600">Sala de Pilares</tspan> (1000 pts) / Caja
+    </text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- WEAPON 3: BASTÓN DE ANOR -->
+  <!-- ========================================== -->
+  <g transform="translate(745, 85)" filter="url(#shadowW)">
+    <rect width="310" height="365" fill="url(#wCardBg)" stroke="#ef4444" stroke-width="1.5" rx="12" />
+    <!-- Art Header -->
+    <rect x="1" y="1" width="308" height="90" fill="url(#staffArtGrad)" rx="11" />
+    <!-- Stylized Staff Icon -->
+    <line x1="155" y1="28" x2="155" y2="78" stroke="#78350f" stroke-width="4.5" />
+    <circle cx="155" cy="30" r="14" fill="#dc2626" stroke="#fca5a5" stroke-width="2" />
+    <circle cx="155" cy="30" r="6" fill="#fef08a" />
+
+    <!-- Name & Subtitle -->
+    <text x="155" y="118" text-anchor="middle" font-family="'Cinzel', serif" font-size="15" font-weight="bold" fill="#ef4444">
+      BASTÓN DE ANOR
+    </text>
+    <text x="155" y="134" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" fill="#94a3b8">
+      Magia de Fuego · Daño de Área (2.8m)
+    </text>
+
+    <!-- Upgraded Pack a Punch Name -->
+    <rect x="25" y="145" width="260" height="24" fill="#450a0a" stroke="#ef4444" stroke-width="1" rx="4" />
+    <text x="155" y="161" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#fca5a5">
+      ⚡ Mejora: Fuego Secreto
+    </text>
+
+    <!-- Stats -->
+    <g transform="translate(25, 185)">
+      <text y="12" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Daño por impacto</text>
+      <text x="260" y="12" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#ef4444">145 PTS (Área)</text>
+      <rect y="17" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="17" width="190" height="5" fill="#ef4444" rx="2.5" />
+
+      <text y="38" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Cadencia de fuego</text>
+      <text x="260" y="38" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#ef4444">480 ms</text>
+      <rect y="43" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="43" width="120" height="5" fill="#ef4444" rx="2.5" />
+
+      <text y="64" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Cargador / Reserva</text>
+      <text x="260" y="64" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#ef4444">10 / 60 orbes</text>
+      <rect y="69" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="69" width="95" height="5" fill="#ef4444" rx="2.5" />
+
+      <text y="90" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#cbd5e1">Radio de Explosión</text>
+      <text x="260" y="90" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="bold" fill="#f87171">2.8 Metros</text>
+      <rect y="95" width="260" height="5" fill="#334155" rx="2.5" />
+      <rect y="95" width="160" height="5" fill="#f87171" rx="2.5" />
+    </g>
+
+    <!-- Source tag -->
+    <rect x="25" y="310" width="260" height="28" fill="#0f172a" rx="4" />
+    <text x="155" y="328" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      📍 <tspan fill="#e2e8f0" font-weight="600">Puente Khazad-dûm</tspan> (2500 pts) / Caja
+    </text>
+  </g>
+</svg>

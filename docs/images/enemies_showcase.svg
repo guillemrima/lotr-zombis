@@ -1,0 +1,222 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 520" width="100%" height="100%">
+  <defs>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0b1120" />
+    </linearGradient>
+    <linearGradient id="goblinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14532d" />
+      <stop offset="100%" stop-color="#052e16" />
+    </linearGradient>
+    <linearGradient id="orcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c2d12" />
+      <stop offset="100%" stop-color="#431407" />
+    </linearGradient>
+    <linearGradient id="urukGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#831843" />
+      <stop offset="100%" stop-color="#4c0519" />
+    </linearGradient>
+    <linearGradient id="headerGold" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ca8a04" />
+      <stop offset="50%" stop-color="#fef08a" />
+      <stop offset="100%" stop-color="#a16207" />
+    </linearGradient>
+    <filter id="shadowCard">
+      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#000" flood-opacity="0.6" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="520" fill="#070a12" rx="16" />
+
+  <!-- Section Header -->
+  <text x="550" y="45" text-anchor="middle" font-family="'Cinzel', 'Georgia', serif" font-size="22" font-weight="bold" fill="url(#headerGold)" letter-spacing="4">
+    BESTIARIO DE KHAZAD-DÛM: LA HORDA DE LA OSCURIDAD
+  </text>
+  <text x="550" y="68" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="12" fill="#94a3b8" letter-spacing="1">
+    ESCALADO PROGRESIVO DE SALUD, VELOCIDAD Y COMPORTAMIENTO POR RONDAS
+  </text>
+
+  <!-- ========================================== -->
+  <!-- CARD 1: TRASGO DE MORIA (GOBLIN) -->
+  <!-- ========================================== -->
+  <g transform="translate(45, 90)" filter="url(#shadowCard)">
+    <rect width="310" height="395" fill="url(#cardBg)" stroke="#22c55e" stroke-width="1.5" rx="12" />
+    <!-- Avatar Banner -->
+    <rect x="1" y="1" width="308" height="110" fill="url(#goblinGrad)" rx="11" />
+    <circle cx="155" cy="55" r="38" fill="#15803d" stroke="#86efac" stroke-width="2" />
+    <!-- Stylized Goblin Icon/Head -->
+    <path d="M 135 60 C 135 40, 175 40, 175 60 C 175 75, 135 75, 135 60 Z" fill="#22c55e" />
+    <path d="M 125 45 L 140 50 L 130 60 Z" fill="#16a34a" /> <!-- Left Ear -->
+    <path d="M 185 45 L 170 50 L 180 60 Z" fill="#16a34a" /> <!-- Right Ear -->
+    <circle cx="147" cy="55" r="3.5" fill="#facc15" />
+    <circle cx="163" cy="55" r="3.5" fill="#facc15" />
+    <path d="M 148 68 Q 155 74 162 68" stroke="#052e16" stroke-width="2" fill="none" />
+
+    <!-- Name & Type -->
+    <text x="155" y="142" text-anchor="middle" font-family="'Cinzel', serif" font-size="16" font-weight="bold" fill="#4ade80">
+      TRASGO DE MORIA
+    </text>
+    <text x="155" y="160" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="11" fill="#86efac" font-weight="600">
+      ENJAMBRE ÁGIL · RONDA 1+
+    </text>
+
+    <!-- Stats -->
+    <g transform="translate(25, 180)">
+      <!-- Stat 1: HP -->
+      <text y="14" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Salud Base</text>
+      <text x="260" y="14" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#f87171">90 HP (1.0x)</text>
+      <rect y="20" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="20" width="100" height="6" fill="#ef4444" rx="3" />
+
+      <!-- Stat 2: Speed -->
+      <text y="46" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Velocidad de Carrera</text>
+      <text x="260" y="46" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#38bdf8">115% (Rápido)</text>
+      <rect y="52" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="52" width="230" height="6" fill="#38bdf8" rx="3" />
+
+      <!-- Stat 3: Damage -->
+      <text y="78" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Daño por Golpe</text>
+      <text x="260" y="78" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#fbbf24">28 Daño</text>
+      <rect y="84" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="84" width="120" height="6" fill="#f59e0b" rx="3" />
+    </g>
+
+    <!-- Lore description -->
+    <rect x="18" y="295" width="274" height="80" fill="#0f172a" rx="6" />
+    <text x="28" y="316" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      Criaturas subterráneas habituadas a la
+    </text>
+    <text x="28" y="332" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      oscuridad. Su escasa armadura los hace
+    </text>
+    <text x="28" y="348" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      vulnerables, pero su velocidad y número
+    </text>
+    <text x="28" y="364" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#4ade80" font-weight="600">
+      pueden acorralarte en las esquinas.
+    </text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- CARD 2: ORCO DE MORDOR (ORC) -->
+  <!-- ========================================== -->
+  <g transform="translate(395, 90)" filter="url(#shadowCard)">
+    <rect width="310" height="395" fill="url(#cardBg)" stroke="#f97316" stroke-width="1.5" rx="12" />
+    <!-- Avatar Banner -->
+    <rect x="1" y="1" width="308" height="110" fill="url(#orcGrad)" rx="11" />
+    <circle cx="155" cy="55" r="38" fill="#9a3412" stroke="#fdba74" stroke-width="2" />
+    <!-- Stylized Orc Helmet/Head -->
+    <path d="M 132 50 C 132 32, 178 32, 178 50 L 178 70 L 132 70 Z" fill="#57534e" />
+    <path d="M 148 40 L 155 30 L 162 40 Z" fill="#a8a29e" /> <!-- Spike -->
+    <line x1="140" y1="56" x2="170" y2="56" stroke="#1c1917" stroke-width="3" />
+    <circle cx="147" cy="56" r="3" fill="#ef4444" />
+    <circle cx="163" cy="56" r="3" fill="#ef4444" />
+    <path d="M 142 66 L 145 74 L 148 66 L 162 66 L 165 74 L 168 66" fill="#fef08a" /> <!-- Fangs -->
+
+    <!-- Name & Type -->
+    <text x="155" y="142" text-anchor="middle" font-family="'Cinzel', serif" font-size="16" font-weight="bold" fill="#fb923c">
+      ORCO DE MORDOR
+    </text>
+    <text x="155" y="160" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="11" fill="#fed7aa" font-weight="600">
+      INFANTERÍA ACORAZADA · RONDA 2+
+    </text>
+
+    <!-- Stats -->
+    <g transform="translate(25, 180)">
+      <!-- Stat 1: HP -->
+      <text y="14" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Salud Base</text>
+      <text x="260" y="14" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#f87171">122 HP (1.35x)</text>
+      <rect y="20" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="20" width="145" height="6" fill="#ef4444" rx="3" />
+
+      <!-- Stat 2: Speed -->
+      <text y="46" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Velocidad de Carrera</text>
+      <text x="260" y="46" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#38bdf8">100% (Estándar)</text>
+      <rect y="52" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="52" width="180" height="6" fill="#38bdf8" rx="3" />
+
+      <!-- Stat 3: Damage -->
+      <text y="78" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Daño por Golpe</text>
+      <text x="260" y="78" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#fbbf24">28 Daño</text>
+      <rect y="84" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="84" width="120" height="6" fill="#f59e0b" rx="3" />
+    </g>
+
+    <!-- Lore description -->
+    <rect x="18" y="295" width="274" height="80" fill="#0f172a" rx="6" />
+    <text x="28" y="316" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      Guerreros crueles protegidos por cotas
+    </text>
+    <text x="28" y="332" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      de malla y hombreras de hierro oxidado.
+    </text>
+    <text x="28" y="348" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      Soportan múltiples flechas en el torso;
+    </text>
+    <text x="28" y="364" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#fb923c" font-weight="600">
+      se recomienda apuntar a la cabeza.
+    </text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- CARD 3: BERSERKER URUK-HAI (URUK) -->
+  <!-- ========================================== -->
+  <g transform="translate(745, 90)" filter="url(#shadowCard)">
+    <rect width="310" height="395" fill="url(#cardBg)" stroke="#ec4899" stroke-width="1.5" rx="12" />
+    <!-- Avatar Banner -->
+    <rect x="1" y="1" width="308" height="110" fill="url(#urukGrad)" rx="11" />
+    <circle cx="155" cy="55" r="38" fill="#9f1239" stroke="#f472b6" stroke-width="2" />
+    <!-- Stylized Uruk War Paint / Helmet -->
+    <path d="M 130 45 C 130 28, 180 28, 180 45 L 180 72 L 130 72 Z" fill="#292524" />
+    <!-- White Hand of Saruman paint mark -->
+    <path d="M 148 46 L 152 40 L 155 46 L 158 39 L 161 46 L 164 42" stroke="#f5f5f4" stroke-width="2" fill="none" />
+    <circle cx="155" cy="52" r="4" fill="#f5f5f4" />
+    <circle cx="145" cy="60" r="3.5" fill="#dc2626" />
+    <circle cx="165" cy="60" r="3.5" fill="#dc2626" />
+
+    <!-- Name & Type -->
+    <text x="155" y="142" text-anchor="middle" font-family="'Cinzel', serif" font-size="16" font-weight="bold" fill="#f472b6">
+      BERSERKER URUK-HAI
+    </text>
+    <text x="155" y="160" text-anchor="middle" font-family="'Segoe UI', sans-serif" font-size="11" fill="#fbcfe8" font-weight="600">
+      TANQUE BRUTAL · RONDA 5+
+    </text>
+
+    <!-- Stats -->
+    <g transform="translate(25, 180)">
+      <!-- Stat 1: HP -->
+      <text y="14" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Salud Base</text>
+      <text x="260" y="14" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#f87171">189 HP (2.1x)</text>
+      <rect y="20" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="20" width="240" height="6" fill="#ef4444" rx="3" />
+
+      <!-- Stat 2: Speed -->
+      <text y="46" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Velocidad de Carrera</text>
+      <text x="260" y="46" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#38bdf8">92% (Imparable)</text>
+      <rect y="52" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="52" width="165" height="6" fill="#38bdf8" rx="3" />
+
+      <!-- Stat 3: Damage -->
+      <text y="78" font-family="'Segoe UI', sans-serif" font-size="11" fill="#cbd5e1">Daño por Golpe</text>
+      <text x="260" y="78" text-anchor="end" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="bold" fill="#fbbf24">42 Daño (¡Mortal!)</text>
+      <rect y="84" width="260" height="6" fill="#334155" rx="3" />
+      <rect y="84" width="210" height="6" fill="#f59e0b" rx="3" />
+    </g>
+
+    <!-- Lore description -->
+    <rect x="18" y="295" width="274" height="80" fill="#0f172a" rx="6" />
+    <text x="28" y="316" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      Monstruos de choque seleccionados por
+    </text>
+    <text x="28" y="332" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      su brutalidad. Su descomunal fuerza puede
+    </text>
+    <text x="28" y="348" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#94a3b8">
+      derribarte en solo 3 impactos sin la
+    </text>
+    <text x="28" y="364" font-family="'Segoe UI', sans-serif" font-size="10.5" fill="#f472b6" font-weight="600">
+      ventaja Hidromiel de Beorn activa.
+    </text>
+  </g>
+</svg>
