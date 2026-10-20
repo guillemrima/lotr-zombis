@@ -1,0 +1,695 @@
+<div class="game-viewport">
+  <!-- 3D WebGL Canvas -->
+  <canvas #gameCanvas class="webgl-canvas"></canvas>
+
+  <!-- Vignette & Blood Damage Overlay (CoD Zombies Screen Blood Vignette) -->
+  <div class="ambient-vignette"></div>
+  <div
+    class="damage-flash"
+    [class.active]="damageFlash()"
+    [class.critical]="healthPercent() <= 35 && gameStarted()"
+  ></div>
+
+  <!-- Live FPS Telemetry Counter (Top-Right) -->
+  <div
+    class="fps-counter"
+    [class.good]="fps() >= 55"
+    [class.warn]="fps() >= 30 && fps() < 55"
+    [class.bad]="fps() < 30"
+  >
+    <strong>{{ fps() }} FPS</strong>
+    <span>({{ frameTimeMs() }} ms)</span>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MEDIEVAL FANTASY COD ZOMBIES HUD                                      -->
+  <!-- ===================================================================== -->
+  @if (gameStarted()) {
+    <div class="hud-layer">
+      <!-- Top-Left: Room & Floor Elevation Plaque + Tactical Blueprint Hint -->
+      <div class="hud-top-left">
+        <div class="location-plaque">
+          <div class="location-room">{{ currentRoomName() }}</div>
+          <div class="location-floor">{{ currentFloorLabel() }}</div>
+        </div>
+        <div class="map-key-hint" [class.active]="showTacticalMap()">
+          <span>[M / Tab]</span> Plano Táctico de Moria
+        </div>
+      </div>
+
+      <!-- Subtle Compact Telemetry Strip (Horde, Kills, Headshots & Active Power-Ups) -->
+      <div class="hud-top">
+        <div class="top-stats-compact">
+          <span>Horda: <strong>{{ enemiesRemaining() }}</strong></span>
+          <span class="sep">·</span>
+          <span>Bajas: <strong>{{ kills() }}</strong></span>
+          <span class="sep">·</span>
+          <span>Críticos: <strong class="gold">{{ headshots() }}</strong></span>
+        </div>
+
+        @if (activePowerUps().length > 0) {
+          <div class="powerups-bar">
+            @for (p of activePowerUps(); track p.type) {
+              <div class="powerup-medallion" [class.insta]="p.type === 'insta_kill'">
+                <span class="powerup-icon">✦</span>
+                <span class="powerup-name">{{ p.name }}</span>
+                <strong class="powerup-timer">{{ p.remainingSec | number: '1.0-0' }}s</strong>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- Notification Scroll Banner (Perks, Pack-a-Punch, Max Ammo) -->
+      @if (notificationBanner()) {
+        <div class="event-scroll-banner">
+          <span class="scroll-ornament">❖</span>
+          <span>{{ notificationBanner() }}</span>
+          <span class="scroll-ornament">❖</span>
+        </div>
+      }
+
+      <!-- CoD Zombies Dramatic Round Transition Banner -->
+      @if (roundTransitioning()) {
+        <div class="round-transition-banner">
+          <div class="round-subtitle">LA HORDA DE MORIA SE ALZA</div>
+          <div class="round-main-title">{{ roundBannerText() }}</div>
+          <div class="round-blood-line"></div>
+        </div>
+      }
+
+      <!-- Center Crosshair + Circular Reload Progress Ring + Hitmarker -->
+      <div class="crosshair-container">
+        <div class="crosshair-wrapper" [class.aiming]="isAiming()">
+          <div class="crosshair-dot"></div>
+          <div class="crosshair-line top"></div>
+          <div class="crosshair-line bottom"></div>
+          <div class="crosshair-line left"></div>
+          <div class="crosshair-line right"></div>
+
+          @if (hitmarkerActive()) {
+            <div class="hitmarker" [class.crit]="hitmarkerCrit()">✕</div>
+          }
+        </div>
+
+        <!-- Pure Circular Reload Indicator (No modal box!) -->
+        @if (isReloading()) {
+          <svg class="reload-ring-svg" viewBox="0 0 56 56">
+            <circle class="reload-ring-track" cx="28" cy="28" r="22"></circle>
+            <circle
+              class="reload-ring-progress"
+              cx="28"
+              cy="28"
+              r="22"
+              [style.strokeDashoffset]="reloadDashOffset()"
+            ></circle>
+          </svg>
+        }
+
+        <!-- Blinking Red "Sin munición" Alert -->
+        @if (isOutOfAmmo()) {
+          <div class="no-ammo-alert">Sin munición</div>
+        }
+      </div>
+
+      <!-- Floating Points Popups (+10, +60, +100) -->
+      @for (pop of floatingPopups(); track pop.id) {
+        <div
+          class="floating-point"
+          [class.crit]="pop.isCrit"
+          [style.left.%]="pop.x"
+          [style.top.%]="pop.y"
+        >
+          +{{ pop.value }}
+        </div>
+      }
+
+      <!-- Medieval Interact Plaque (Wall Weapons, Perks, Mystery Box, Barricades) -->
+      @if (activeInteractable(); as item) {
+        <div class="interact-plaque">
+          <div class="interact-title">{{ item.title }}</div>
+          <div class="interact-sub">{{ item.subtitle }}</div>
+
+          @if (item.type === 'window' && repairProgress() > 0) {
+            <div class="medieval-bar-track small">
+              <div class="medieval-bar-fill repair" [style.width.%]="repairProgress()"></div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ================================================================= -->
+      <!-- BOTTOM-LEFT: COD ZOMBIES BLOOD ROUND NUMERAL, PERK SEALS & HEALTH -->
+      <!-- ================================================================= -->
+      <div class="hud-bottom-left">
+        <!-- Ornate CoD Zombies Style Perk-a-Cola Emblem Badges -->
+        @if (ownedPerks().length > 0) {
+          <div class="perks-emblem-row">
+            @for (perk of ownedPerks(); track perk.id) {
+              <div class="perk-badge-item">
+                <div
+                  class="perk-crest-shield"
+                  [style.borderColor]="perk.color"
+                  [style.boxShadow]="'0 0 14px ' + perk.color + '88, inset 0 0 12px ' + perk.color + '55'"
+                  [style.background]="'radial-gradient(circle at 35% 30%, ' + perk.color + '44 0%, #090d16 78%)'"
+                >
+                  <div class="perk-inner-ring"></div>
+                  @switch (perk.id) {
+                    @case ('beorn_mead') {
+                      <!-- Juggernog: Dwarven Shield + Vitality Cross SVG -->
+                      <svg class="perk-svg-icon" viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm3.5 10.5h-2.5v2.5h-2v-2.5H8.5v-2H11V8h2v2.5h2.5v2z"
+                        />
+                      </svg>
+                    }
+                    @case ('lembas_bread') {
+                      <!-- Speed Cola: Lightning Bolt + Elven Leaf SVG -->
+                      <svg class="perk-svg-icon" viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M13 2L4.5 13.5h6l-1.5 8.5L19.5 10.5h-6L13 2z"
+                        />
+                      </svg>
+                    }
+                    @case ('shire_ale') {
+                      <!-- Double Tap: Twin Split Broadhead Arrows SVG -->
+                      <svg class="perk-svg-icon" viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M7 3l4 4-2.5 2.5 5 5 2.5-2.5 4 4V9l-2 2-5-5 2-2H7zm-3 9l4 4-1.5 1.5L11 22l1.5-1.5 4 4v-7l-2 2-4.5-4.5 2-2H4z"
+                        />
+                      </svg>
+                    }
+                    @default {
+                      <!-- Stamin-Up: Six-Pointed Star of Eärendil + Wings SVG -->
+                      <svg class="perk-svg-icon" viewBox="0 0 24 24">
+                        <path
+                          fill="currentColor"
+                          d="M12 1l2.8 6.4L22 8.5l-5.2 4.7 1.5 6.8L12 16.5 5.7 20l1.5-6.8L2 8.5l7.2-1.1L12 1z"
+                        />
+                      </svg>
+                    }
+                  }
+                </div>
+                <span class="perk-mini-code" [style.color]="perk.color">{{ perk.icon }}</span>
+              </div>
+            }
+          </div>
+        }
+
+        <!-- Classic CoD Zombies Chalk/Blood Round Numeral (Roman I..IX, then 10+) -->
+        <div class="zombies-round-cluster" [class.transitioning]="roundTransitioning()">
+          <span class="round-caption">RONDA</span>
+          <div class="round-numeral">{{ formatRound(round()) }}</div>
+        </div>
+
+        <!-- Forged Iron & Gold Vitality Bar -->
+        <div class="vitality-frame">
+          <div class="vitality-header">
+            <span class="vitality-title">✦ VITALIDAD</span>
+            <span class="vitality-numbers">{{ health() | number: '1.0-0' }} / {{ maxHealth() }}</span>
+          </div>
+          <div class="medieval-bar-track">
+            <div
+              class="medieval-bar-fill health"
+              [class.low]="healthPercent() <= 35"
+              [style.width.%]="healthPercent()"
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- BOTTOM-RIGHT: KINO DER TOTEN CRIMSON POINTS SMEAR & WEAPON PLAQUE -->
+      <!-- ================================================================= -->
+      <div class="hud-bottom-right">
+        <!-- CoD Zombies Crimson Brushstroke Points Banner -->
+        <div class="zombies-points-banner">
+          <span class="points-crest">⚜</span>
+          <span class="points-value">{{ points() }}</span>
+        </div>
+
+        <!-- Forged Dwarven/Elven Weapon & Ammo Plaque -->
+        <div class="weapon-plaque" [class.upgraded]="currentWeapon().isUpgraded">
+          @if (currentWeapon().isUpgraded) {
+            <div class="upgraded-rune-badge">✦ FORJADA POR CELEBRIMBOR ✦</div>
+          }
+          <div class="weapon-title">{{ currentWeapon().name }}</div>
+
+          <div class="ammo-counter-row">
+            <span
+              class="ammo-mag"
+              [class.low]="isLowAmmo()"
+              [class.empty]="currentWeapon().currentMag === 0"
+            >
+              {{ currentWeapon().currentMag }}
+            </span>
+            <span class="ammo-sep">/</span>
+            <span
+              class="ammo-reserve"
+              [class.empty]="currentWeapon().reserveAmmo === 0"
+            >
+              {{ currentWeapon().reserveAmmo }}
+            </span>
+          </div>
+
+          @if (isOutOfAmmo()) {
+            <div class="weapon-no-ammo-tag">SIN MUNICIÓN</div>
+          }
+
+          <div class="controls-hint">
+            [Click Der] Apuntar · [R] Recargar · [F] Interactuar · [M / Tab] Mapa · [Rueda / Q] Arma
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- COD ZOMBIES TACTICAL ARCHITECTURAL BLUEPRINT OVERLAY ([M] / [TAB])-->
+      <!-- ================================================================= -->
+      @if (showTacticalMap()) {
+        <div class="tactical-map-overlay">
+          <div class="tactical-map-card">
+            <div class="tactical-map-header">
+              <div>
+                <div class="map-kicker">❖ PLANO TÁCTICO DE KHAZAD-DÛM (5 SALAS · 6 ALTURAS) ❖</div>
+                <h3>{{ currentRoomName() }} · <span>{{ currentFloorLabel() }}</span></h3>
+              </div>
+              <div class="map-close-hint">Pulsa <strong>[M]</strong> o <strong>[Tab]</strong> para cerrar</div>
+            </div>
+
+            <div class="tactical-map-body">
+              <svg class="moria-blueprint-svg" viewBox="-44 -20 88 100">
+                <defs>
+                  <pattern id="stairHatch" width="2" height="2" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="0" x2="2" y2="0" stroke="#94a3b8" stroke-width="0.45" />
+                  </pattern>
+                  <pattern id="lavaPattern" width="4" height="4" patternUnits="userSpaceOnUse">
+                    <rect width="4" height="4" fill="#450a0a" />
+                    <circle cx="2" cy="2" r="1.1" fill="#ea580c" opacity="0.65" />
+                  </pattern>
+                </defs>
+
+                <!-- ================= SALA 1: CÁMARA DE MAZARBUL (0.0m & +1.2m) ================= -->
+                <rect x="-16" y="-15" width="32" height="30" class="room-box unlocked" />
+                <!-- North Elevated Sanctum (+1.2m) -->
+                <rect x="-7.5" y="-15" width="15" height="6" class="room-terrace upper" />
+                <!-- Twin Stairs UP to Sanctum -->
+                <rect x="-11.5" y="-9.2" width="3.5" height="3.2" fill="url(#stairHatch)" stroke="#fbbf24" stroke-width="0.3" />
+                <rect x="8.0" y="-9.2" width="3.5" height="3.2" fill="url(#stairHatch)" stroke="#fbbf24" stroke-width="0.3" />
+                <!-- Balin's Tomb & Tactical Barricade Islands -->
+                <rect x="-2.1" y="-1.3" width="4.2" height="2.6" class="map-obstacle" />
+                <rect x="-6.6" y="-2.2" width="1.1" height="2.8" class="map-obstacle" />
+                <rect x="5.5" y="-2.2" width="1.1" height="2.8" class="map-obstacle" />
+                <text x="0" y="5.5" class="room-title">SALA 1: MAZARBUL</text>
+                <text x="0" y="8.2" class="room-elev">(0.0m / Altar Norte +1.2m)</text>
+
+                <!-- ================= TÚNEL CENTRAL (ESC. ABAJO 0.0m -> -1.2m) ================= -->
+                <rect x="-5.5" y="15" width="11" height="10" fill="url(#stairHatch)" class="stair-corridor" />
+                <text x="0" y="21" class="stair-label">▼ ESC. -1.2m</text>
+
+                <!-- ================= SALA 2: PILARES DE KHAZAD-DÛM (-1.2m & +0.2m) ============ -->
+                <rect
+                  x="-18"
+                  y="25"
+                  width="36"
+                  height="28"
+                  class="room-box"
+                  [class.unlocked]="isRoomUnlocked(2)"
+                />
+                <!-- South Elevated Gallery (+0.2m) -->
+                <rect x="-18" y="47.8" width="36" height="5.2" class="room-terrace mid" />
+                <!-- Twin Stairs UP to South Gallery -->
+                <rect x="-15.5" y="44.5" width="5.2" height="3.3" fill="url(#stairHatch)" stroke="#fbbf24" stroke-width="0.3" />
+                <rect x="10.3" y="44.5" width="5.2" height="3.3" fill="url(#stairHatch)" stroke="#fbbf24" stroke-width="0.3" />
+                <!-- Central Mithril Shrine & Colonnade Islands -->
+                <circle cx="0" cy="39" r="3.2" class="map-obstacle" />
+                <rect x="-7" y="34" width="1.5" height="4.8" class="map-obstacle" />
+                <rect x="5.5" y="34" width="1.5" height="4.8" class="map-obstacle" />
+                <text x="0" y="31.5" class="room-title">SALA 2: GRAN SALA DE PILARES</text>
+                <text x="0" y="34.2" class="room-elev">(-1.2m / Galería Sur +0.2m)</text>
+
+                <!-- ================= SALA 3: GALERÍA REAL DE DURIN (OESTE, +2.8m) ============= -->
+                <!-- North-West Stairs UP (0.0m -> +2.8m) -->
+                <rect x="-26" y="-6.2" width="10" height="5.4" fill="url(#stairHatch)" class="stair-corridor" />
+                <text x="-21" y="-2.8" class="stair-label">◀ ▲ +2.8m</text>
+                <!-- South-West Stairs (+2.8m <-> -1.2m) -->
+                <rect x="-26" y="29.3" width="8" height="5.4" fill="url(#stairHatch)" class="stair-corridor" />
+                <text x="-22" y="32.5" class="stair-label">▲/▼</text>
+                <!-- Room 3 Body -->
+                <rect
+                  x="-37"
+                  y="-6.2"
+                  width="15"
+                  height="42.2"
+                  class="room-box upper-wing"
+                  [class.unlocked]="isRoomUnlocked(3)"
+                />
+                <!-- Central Open Lightwell / Chasm -->
+                <rect x="-32" y="10" width="5.2" height="14" fill="#020617" stroke="#f59e0b" stroke-width="0.4" />
+                <text x="-29.5" y="4.5" class="room-title-sm">SALA 3: GALERÍA</text>
+                <text x="-29.5" y="7.2" class="room-elev-sm">REAL (+2.8m ▲)</text>
+
+                <!-- ================= SALA 4: MINAS PROFUNDAS DE MITHRIL (ESTE, -2.6m) ========= -->
+                <!-- North-East Stairs DOWN (0.0m -> -2.6m) -->
+                <rect x="16" y="-6.2" width="10" height="5.4" fill="url(#stairHatch)" class="stair-corridor" />
+                <text x="21" y="-2.8" class="stair-label">▼ -2.6m ▶</text>
+                <!-- South-East Stairs (-2.6m <-> -1.2m) -->
+                <rect x="18" y="29.3" width="8" height="5.4" fill="url(#stairHatch)" class="stair-corridor" />
+                <text x="22" y="32.5" class="stair-label">▼/▲</text>
+                <!-- Room 4 Body -->
+                <rect
+                  x="22"
+                  y="-6.2"
+                  width="16"
+                  height="42.2"
+                  class="room-box deep-wing"
+                  [class.unlocked]="isRoomUnlocked(4)"
+                />
+                <!-- Central Mithril Crusher Island -->
+                <rect x="27.2" y="13.8" width="5.6" height="8.4" class="map-obstacle" />
+                <text x="30" y="4.5" class="room-title-sm">SALA 4: MINAS</text>
+                <text x="30" y="7.2" class="room-elev-sm">MITHRIL (-2.6m ▼)</text>
+
+                <!-- ================= SALA 5: PUENTE DE KHAZAD-DÛM & FORJA (-2.4m) ============= -->
+                <rect
+                  x="-14"
+                  y="53"
+                  width="28"
+                  height="23"
+                  fill="url(#lavaPattern)"
+                  class="room-box sanctum-wing"
+                  [class.unlocked]="isRoomUnlocked(5)"
+                />
+                <!-- Narrow Bridge & Forge Island -->
+                <rect x="-4" y="53" width="8" height="12" fill="#1e293b" stroke="#fb923c" stroke-width="0.4" />
+                <rect x="-11" y="64" width="22" height="11" fill="#1e293b" stroke="#c084fc" stroke-width="0.5" />
+                <text x="0" y="67.5" class="room-title">SALA 5: PUENTE Y FORJA</text>
+                <text x="0" y="70" class="room-elev">ABISMO DE FUEGO (-2.4m ▼)</text>
+
+                <!-- ================= 6 PUERTAS COMPRABLES (DOORS) ============================= -->
+                <!-- Door Zone 2 (1000) -->
+                <g class="door-marker" [class.open]="isDoorUnlocked('door_zone_2')">
+                  <rect x="-5.5" y="14.2" width="11" height="1.8" />
+                  <text x="0" y="13.2">1000</text>
+                </g>
+                <!-- Door Zone 3 North (1250) -->
+                <g class="door-marker" [class.open]="isDoorUnlocked('door_zone_3_north')">
+                  <rect x="-16.9" y="-6.2" width="1.8" height="5.4" />
+                  <text x="-19.5" y="-7.2">1250</text>
+                </g>
+                <!-- Door Zone 4 North (1250) -->
+                <g class="door-marker" [class.open]="isDoorUnlocked('door_zone_4_north')">
+                  <rect x="15.1" y="-6.2" width="1.8" height="5.4" />
+                  <text x="19.5" y="-7.2">1250</text>
+                </g>
+                <!-- Door Zone 3 South (1250) -->
+                <g class="door-marker" [class.open]="isDoorUnlocked('door_zone_3_south')">
+                  <rect x="-18.9" y="29.3" width="1.8" height="5.4" />
+                  <text x="-21" y="28.2">1250</text>
+                </g>
+                <!-- Door Zone 4 South (1250) -->
+                <g class="door-marker" [class.open]="isDoorUnlocked('door_zone_4_south')">
+                  <rect x="17.1" y="29.3" width="1.8" height="5.4" />
+                  <text x="21" y="28.2">1250</text>
+                </g>
+                <!-- Door Zone 5 South Abyss (1750) -->
+                <g class="door-marker" [class.open]="isDoorUnlocked('door_zone_5')">
+                  <rect x="-4.5" y="52.1" width="9" height="1.8" />
+                  <text x="0" y="51.2">1750</text>
+                </g>
+
+                <!-- ================= PERKS, WALL WEAPONS, MYSTERY BOX & PAP =================== -->
+                <!-- Room 1: Juggernog (0, -14.2) & Crossbow (-5.8, -14.2) -->
+                <circle cx="0" cy="-13.6" r="1.5" fill="#ef4444" stroke="#fff" stroke-width="0.35" />
+                <text x="0" y="-13.1" class="icon-txt">JG</text>
+                <rect x="-7.2" y="-14.5" width="2.4" height="1.6" fill="#38bdf8" />
+
+                <!-- Room 2: Stamin-Up (16.5, 39) & Mithril Repeater (-11.5, 52) -->
+                <circle cx="15.8" cy="39" r="1.5" fill="#eab308" stroke="#fff" stroke-width="0.35" />
+                <text x="15.8" y="39.5" class="icon-txt">ST</text>
+                <rect x="-12.8" y="50.5" width="2.4" height="1.6" fill="#38bdf8" />
+
+                <!-- Room 3: Speed Cola (-29, 2.8) & Staff of Anor (-35, 19) -->
+                <circle cx="-29.5" cy="-3.8" r="1.5" fill="#22c55e" stroke="#fff" stroke-width="0.35" />
+                <text x="-29.5" y="-3.3" class="icon-txt">SC</text>
+                <rect x="-36.2" y="18" width="2.4" height="1.6" fill="#38bdf8" />
+
+                <!-- Room 4: Double Tap (30, 34) & Mystery Box (36, 18) -->
+                <circle cx="30" cy="33.5" r="1.5" fill="#f97316" stroke="#fff" stroke-width="0.35" />
+                <text x="30" y="34" class="icon-txt">DT</text>
+                <rect x="34.2" y="16.8" width="2.8" height="2.2" fill="#facc15" stroke="#fff" stroke-width="0.35" />
+                <text x="35.6" y="18.4" class="icon-txt dark">?</text>
+
+                <!-- Room 5: Pack-a-Punch (0, 73.5) & Bard's Black Bow (-8.2, 68) -->
+                <polygon points="0,71.2 2.2,73.5 0,75.8 -2.2,73.5" fill="#c084fc" stroke="#fff" stroke-width="0.4" />
+                <text x="0" y="74.1" class="icon-txt">PaP</text>
+                <rect x="-9.5" y="67" width="2.4" height="1.6" fill="#38bdf8" />
+
+                <!-- ================= LIVE PLAYER MARKER ======================================= -->
+                <g [attr.transform]="'translate(' + playerMapX() + ',' + playerMapY() + ') rotate(' + playerMapRotDeg() + ')'">
+                  <circle cx="0" cy="0" r="2.2" fill="rgba(250, 204, 21, 0.28)" />
+                  <polygon points="0,-2.4 1.7,1.8 0,0.9 -1.7,1.8" fill="#facc15" stroke="#090d16" stroke-width="0.45" />
+                </g>
+              </svg>
+
+              <!-- Map Legend (Inspired by CoD Zombies Blueprint Key) -->
+              <div class="tactical-map-legend">
+                <div class="legend-section">
+                  <div class="legend-title">LEYENDA DEL MAPA</div>
+                  <div class="legend-item"><span class="swatch player"></span> Tu Posición Actual</div>
+                  <div class="legend-item"><span class="swatch door-locked"></span> Puerta Cerrada (Puntos)</div>
+                  <div class="legend-item"><span class="swatch door-open"></span> Puerta Abierta</div>
+                  <div class="legend-item"><span class="swatch stairs"></span> Escaleras (▲ Subir / ▼ Bajar)</div>
+                  <div class="legend-item"><span class="swatch wallbuy"></span> Armas de Pared (500–1800)</div>
+                  <div class="legend-item"><span class="swatch box">?</span> Cofre Noldor / Mystery Box (950)</div>
+                  <div class="legend-item"><span class="swatch pap">◆</span> Forja Celebrimbor / PaP (3000)</div>
+                </div>
+
+                <div class="legend-section">
+                  <div class="legend-title">VENTAJAS (PERK-A-COLA)</div>
+                  <div class="legend-item"><span class="perk-dot jg">JG</span> Hidromiel de Beorn (Sala 1 · +1.2m)</div>
+                  <div class="legend-item"><span class="perk-dot st">ST</span> Luz de Eärendil (Sala 2 · -1.2m)</div>
+                  <div class="legend-item"><span class="perk-dot sc">SC</span> Pan de Lembas (Sala 3 · +2.8m)</div>
+                  <div class="legend-item"><span class="perk-dot dt">DT</span> Cerveza Comarca (Sala 4 · -2.6m)</div>
+                </div>
+
+                <div class="legend-section">
+                  <div class="legend-title">NIVELES Y PISOS</div>
+                  <div class="floor-pill"><strong>+2.8m</strong> Sala 3: Galería Real de Durin</div>
+                  <div class="floor-pill"><strong>+1.2m</strong> Sala 1: Santuario Norte</div>
+                  <div class="floor-pill"><strong>+0.2m</strong> Sala 2: Galería Sur Superior</div>
+                  <div class="floor-pill"><strong>0.0m</strong> Sala 1: Cámara de Mazarbul</div>
+                  <div class="floor-pill"><strong>-1.2m</strong> Sala 2: Sala de los Pilares</div>
+                  <div class="floor-pill"><strong>-2.4m</strong> Sala 5: Puente y Forja</div>
+                  <div class="floor-pill"><strong>-2.6m</strong> Sala 4: Minas de Mithril</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ===================================================================== -->
+  <!-- MEDIEVAL FANTASY START MENU                                           -->
+  <!-- ===================================================================== -->
+  @if (!gameStarted()) {
+    <div class="modal-backdrop">
+      <div class="medieval-modal">
+        <div class="modal-rune-crown">❖ MINAS DE MORIA ❖</div>
+        <h1>CÁMARA DE MAZARBUL</h1>
+        <p class="subtitle">Supervivencia por Rondas en Primera Persona (LOTR × CoD Zombies)</p>
+
+        <div class="controls-list">
+          <div><strong>WASD + Shift</strong> <span>Moverse / Sprintar</span></div>
+          <div><strong>Click Izq (Mantener)</strong> <span>Disparo automático continuo</span></div>
+          <div><strong>Click Der (Mantener)</strong> <span>Apuntar con precisión (Tensar arco)</span></div>
+          <div><strong>R</strong> <span>Recargar carcaj / arma</span></div>
+          <div><strong>F</strong> <span>Comprar puertas, armas, ventajas o barricadas</span></div>
+          <div><strong>M / Tab</strong> <span>Ver Plano Táctico de Moria (5 Salas)</span></div>
+          <div><strong>Rueda Ratón / Q / 1 / 2</strong> <span>Cambiar de arma equipada</span></div>
+          <div><strong>ESC</strong> <span>Pausar y Ajustes</span></div>
+        </div>
+
+        <!-- Developer Settings: Custom Starting Round -->
+        <div class="dev-settings-box">
+          <div class="dev-header">⚙ AJUSTES DE DESARROLLADOR</div>
+          <div class="dev-row">
+            <span>Iniciar en Ronda:</span>
+            <div class="dev-round-stepper">
+              <button type="button" class="step-btn" (click)="adjustDevStartRound(-1)">−</button>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                class="dev-round-input"
+                [value]="devStartRound()"
+                (input)="setDevStartRound($any($event.target).value)"
+              />
+              <button type="button" class="step-btn" (click)="adjustDevStartRound(1)">+</button>
+            </div>
+          </div>
+          <div class="dev-presets">
+            @for (preset of [1, 5, 10, 15, 20]; track preset) {
+              <button
+                type="button"
+                class="preset-chip"
+                [class.active]="devStartRound() === preset"
+                (click)="setDevStartRound(preset)"
+              >
+                Ronda {{ formatRound(preset) }}
+              </button>
+            }
+          </div>
+          @if (devStartRound() > 1) {
+            <button
+              type="button"
+              class="dev-bonus-toggle"
+              [class.enabled]="devBonusPoints()"
+              (click)="toggleDevBonusPoints()"
+            >
+              Puntos extra por ronda alta ({{ 500 + (devStartRound() - 1) * 1000 }} pts):
+              <strong>{{ devBonusPoints() ? 'SÍ' : 'NO (500 pts)' }}</strong>
+            </button>
+          }
+          <button
+            type="button"
+            class="dev-bonus-toggle"
+            [class.enabled]="devFreeDoors()"
+            (click)="toggleDevFreeDoors()"
+          >
+            Abrir las 5 salas desde el inicio:
+            <strong>{{ devFreeDoors() ? 'SÍ (Todas Abiertas)' : 'NO (Progresión Normal)' }}</strong>
+          </button>
+        </div>
+
+        <button class="medieval-btn primary" (click)="startGame()">
+          ⚔ INICIAR EN RONDA {{ formatRound(devStartRound()) }} ⚔
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- ===================================================================== -->
+  <!-- MEDIEVAL PAUSE MENU                                                   -->
+  <!-- ===================================================================== -->
+  @if (gameStarted() && isPaused() && !isGameOver()) {
+    <div class="modal-backdrop">
+      <div class="medieval-modal small">
+        <div class="modal-rune-crown">❖ PARTIDA EN PAUSA ❖</div>
+        <h2>CONSEJO DE KHAZAD-DÛM</h2>
+
+        <!-- Developer Settings inside Pause Menu -->
+        <div class="dev-settings-box">
+          <div class="dev-header">⚙ AJUSTES DE DESARROLLADOR</div>
+          <div class="dev-row">
+            <span>Ronda al Reiniciar:</span>
+            <div class="dev-round-stepper">
+              <button type="button" class="step-btn" (click)="adjustDevStartRound(-1)">−</button>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                class="dev-round-input"
+                [value]="devStartRound()"
+                (input)="setDevStartRound($any($event.target).value)"
+              />
+              <button type="button" class="step-btn" (click)="adjustDevStartRound(1)">+</button>
+            </div>
+          </div>
+          <div class="dev-presets">
+            @for (preset of [1, 5, 10, 15, 20]; track preset) {
+              <button
+                type="button"
+                class="preset-chip"
+                [class.active]="devStartRound() === preset"
+                (click)="setDevStartRound(preset)"
+              >
+                {{ formatRound(preset) }}
+              </button>
+            }
+          </div>
+          @if (devStartRound() > 1) {
+            <button
+              type="button"
+              class="dev-bonus-toggle"
+              [class.enabled]="devBonusPoints()"
+              (click)="toggleDevBonusPoints()"
+            >
+              Puntos extra ({{ 500 + (devStartRound() - 1) * 1000 }} pts):
+              <strong>{{ devBonusPoints() ? 'SÍ' : 'NO' }}</strong>
+            </button>
+          }
+          <button
+            type="button"
+            class="dev-bonus-toggle"
+            [class.enabled]="devFreeDoors()"
+            (click)="toggleDevFreeDoors()"
+          >
+            Abrir las 5 salas al iniciar:
+            <strong>{{ devFreeDoors() ? 'SÍ' : 'NO' }}</strong>
+          </button>
+        </div>
+
+        <div class="btn-group">
+          <button class="medieval-btn primary" (click)="resumeGame()">
+            Continuar Batalla
+          </button>
+          @if (!currentWeapon().isUpgraded) {
+            <button class="medieval-btn" (click)="upgradeCurrentWeaponNow(); resumeGame()">
+              ⚡ Mejorar Arma Actual (Pack-a-Punch)
+            </button>
+          }
+          <button class="medieval-btn" (click)="unlockAllDoors(); resumeGame()">
+            🔓 Desbloquear Todas las Puertas Ahora
+          </button>
+          <button class="medieval-btn" (click)="toggleMute()">
+            Sonido: {{ sound.muted ? 'SILENCIADO (Activar)' : 'ACTIVO (Silenciar)' }}
+          </button>
+          <button class="medieval-btn" (click)="startGame()">
+            Reiniciar en Ronda {{ formatRound(devStartRound()) }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ===================================================================== -->
+  <!-- MEDIEVAL GAME OVER MENU                                               -->
+  <!-- ===================================================================== -->
+  @if (isGameOver()) {
+    <div class="modal-backdrop">
+      <div class="medieval-modal small game-over">
+        <div class="modal-rune-crown">❖ LA SOMBRA HA VENCIDO ❖</div>
+        <h2>HAS CAÍDO EN MORIA</h2>
+        <p class="subtitle">Sobreviviste hasta la Ronda {{ formatRound(round()) }}</p>
+
+        <div class="stats-list">
+          <div class="stat-item">
+            <span>Ronda Alcanzada</span>
+            <strong>{{ formatRound(round()) }}</strong>
+          </div>
+          <div class="stat-item">
+            <span>Orcos Abatidos</span>
+            <strong>{{ kills() }}</strong>
+          </div>
+          <div class="stat-item">
+            <span>Tiros a la Cabeza</span>
+            <strong>{{ headshots() }}</strong>
+          </div>
+          <div class="stat-item">
+            <span>Puntos Acumulados</span>
+            <strong>{{ points() }}</strong>
+          </div>
+        </div>
+
+        <button class="medieval-btn primary" (click)="startGame()">
+          ⚔ VOLVER A LUCHAR (RONDA {{ formatRound(devStartRound()) }}) ⚔
+        </button>
+      </div>
+    </div>
+  }
+</div>

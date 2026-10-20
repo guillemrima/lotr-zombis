@@ -1,0 +1,1549 @@
+.game-viewport {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #090d16;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: #f8fafc;
+  user-select: none;
+  --hud-scale: 1;
+}
+
+/* Automatic proportional HUD scaling on smaller windows / split-screen / laptops */
+@media (max-width: 1200px), (max-height: 760px) {
+  .game-viewport {
+    --hud-scale: 0.84;
+  }
+}
+
+@media (max-width: 960px), (max-height: 620px) {
+  .game-viewport {
+    --hud-scale: 0.72;
+  }
+}
+
+@media (max-width: 720px), (max-height: 480px) {
+  .game-viewport {
+    --hud-scale: 0.58;
+  }
+}
+
+.webgl-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Subtle Dark Cavern Edge Vignette */
+.ambient-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    transparent 58%,
+    rgba(4, 7, 15, 0.68) 100%
+  );
+  z-index: 4;
+}
+
+/* CoD Zombies Blood Damage Vignette */
+.damage-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 9vmin 2.8vmin rgba(185, 28, 28, 0.85);
+  border: 2px solid rgba(220, 38, 38, 0.7);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  z-index: 5;
+
+  &.active {
+    opacity: 1;
+  }
+
+  &.critical {
+    opacity: 0.55;
+    animation: pulseBloodVignette 1.1s infinite ease-in-out;
+  }
+}
+
+@keyframes pulseBloodVignette {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+/* Live FPS Counter (Top-Right, scales proportionally with window) */
+.fps-counter {
+  position: absolute;
+  top: clamp(6px, 1.3vmin, 14px);
+  right: clamp(8px, 1.6vmin, 18px);
+  z-index: 40;
+  pointer-events: none;
+  transform: scale(var(--hud-scale));
+  transform-origin: top right;
+  background: rgba(9, 13, 22, 0.82);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.6);
+  padding: 3px 9px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: clamp(0.65rem, 1.3vmin, 0.78rem);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  &.good strong {
+    color: #4ade80;
+  }
+  &.warn strong {
+    color: #facc15;
+  }
+  &.bad strong {
+    color: #f87171;
+  }
+  span {
+    color: #94a3b8;
+    font-size: clamp(0.6rem, 1.15vmin, 0.72rem);
+  }
+}
+
+.hud-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ========================================================================== */
+/* TOP COMPACT TELEMETRY STRIP & POWER-UP MEDALLIONS                          */
+/* ========================================================================== */
+.hud-top {
+  position: absolute;
+  top: clamp(6px, 1.2vmin, 12px);
+  left: 50%;
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: top center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.top-stats-compact {
+  background: rgba(9, 13, 22, 0.62);
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  padding: 2px 10px;
+  border-radius: 3px;
+  font-family: 'Cinzel', serif;
+  font-size: clamp(0.58rem, 1.15vmin, 0.68rem);
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+
+  strong {
+    color: #e2e8f0;
+    font-weight: 700;
+
+    &.gold {
+      color: #facc15;
+    }
+  }
+
+  .sep {
+    color: rgba(212, 175, 55, 0.5);
+  }
+}
+
+.powerups-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.powerup-medallion {
+  background: linear-gradient(90deg, rgba(20, 28, 46, 0.92), rgba(30, 41, 59, 0.92));
+  border: 1px solid #facc15;
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.4);
+  color: #fef08a;
+  padding: 3px 11px;
+  border-radius: 3px;
+  font-family: 'Cinzel', serif;
+  font-size: clamp(0.64rem, 1.25vmin, 0.76rem);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+
+  &.insta {
+    border-color: #ef4444;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+    color: #fecaca;
+  }
+
+  .powerup-timer {
+    color: #ffffff;
+    font-weight: 900;
+  }
+}
+
+/* ========================================================================== */
+/* BANNERS (NOTIFICATION SCROLL & COD ZOMBIES ROUND TRANSITION)               */
+/* ========================================================================== */
+.event-scroll-banner {
+  position: absolute;
+  top: clamp(44px, 7.5vmin, 74px);
+  left: 50%;
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: top center;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(15, 23, 42, 0.94) 15%,
+    rgba(15, 23, 42, 0.94) 85%,
+    transparent 100%
+  );
+  border-top: 1px solid #d4af37;
+  border-bottom: 1px solid #d4af37;
+  color: #fef08a;
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 5px 24px;
+  font-size: clamp(0.72rem, 1.5vmin, 0.9rem);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+.round-transition-banner {
+  position: absolute;
+  top: 25%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(var(--hud-scale));
+  transform-origin: center center;
+  text-align: center;
+  white-space: nowrap;
+  animation: roundReveal 0.45s ease-out;
+
+  .round-subtitle {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(0.65rem, 1.4vmin, 0.82rem);
+    letter-spacing: 0.26em;
+    color: #d4af37;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
+    margin-bottom: 2px;
+  }
+
+  .round-main-title {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(1.9rem, 5vmin, 3.1rem);
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    color: #dc2626;
+    text-shadow:
+      0 0 20px rgba(220, 38, 38, 0.9),
+      0 0 36px rgba(153, 27, 27, 0.7),
+      0 4px 10px rgba(0, 0, 0, 0.95);
+  }
+
+  .round-blood-line {
+    width: clamp(150px, 26vmin, 240px);
+    height: 3px;
+    margin: 5px auto 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      #dc2626 30%,
+      #facc15 50%,
+      #dc2626 70%,
+      transparent 100%
+    );
+    box-shadow: 0 0 12px rgba(220, 38, 38, 0.8);
+  }
+}
+
+@keyframes roundReveal {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -42%) scale(calc(var(--hud-scale) * 0.88));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(var(--hud-scale));
+  }
+}
+
+/* ========================================================================== */
+/* CROSSHAIR + CIRCULAR RELOAD RING + BLINKING "SIN MUNICIÓN"                 */
+/* ========================================================================== */
+.crosshair-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(var(--hud-scale));
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crosshair-wrapper {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  transition: transform 0.14s ease, opacity 0.14s ease;
+
+  &.aiming {
+    transform: scale(0.62);
+    opacity: 0.92;
+  }
+}
+
+.crosshair-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  background: #fef08a;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.95);
+}
+
+.crosshair-line {
+  position: absolute;
+  background: rgba(248, 250, 252, 0.9);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+
+  &.top {
+    width: 2px;
+    height: 6px;
+    left: 12px;
+    top: 1px;
+  }
+  &.bottom {
+    width: 2px;
+    height: 6px;
+    left: 12px;
+    bottom: 1px;
+  }
+  &.left {
+    height: 2px;
+    width: 6px;
+    top: 12px;
+    left: 1px;
+  }
+  &.right {
+    height: 2px;
+    width: 6px;
+    top: 12px;
+    right: 1px;
+  }
+}
+
+.hitmarker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9);
+
+  &.crit {
+    color: #ef4444;
+    text-shadow: 0 0 12px rgba(239, 68, 68, 0.95);
+  }
+}
+
+/* Pure Circular SVG Reload Ring around Crosshair (No modal!) */
+.reload-ring-svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 50px;
+  height: 50px;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.65));
+}
+
+.reload-ring-track {
+  fill: none;
+  stroke: rgba(15, 23, 42, 0.72);
+  stroke-width: 4;
+}
+
+.reload-ring-progress {
+  fill: none;
+  stroke: #facc15;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 138.23;
+  transition: stroke-dashoffset 0.06s linear;
+}
+
+/* Blinking Red "Sin munición" Alert below Crosshair */
+.no-ammo-alert {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: 'Cinzel', serif;
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ef4444;
+  text-shadow:
+    0 0 12px rgba(239, 68, 68, 0.95),
+    0 2px 6px rgba(0, 0, 0, 0.98);
+  animation: blinkRedAmmo 0.65s infinite ease-in-out;
+}
+
+@keyframes blinkRedAmmo {
+  0%, 100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.04);
+  }
+  50% {
+    opacity: 0.18;
+    transform: translateX(-50%) scale(0.96);
+  }
+}
+
+/* Floating Points Popups */
+.floating-point {
+  position: absolute;
+  font-family: 'Cinzel', serif;
+  font-weight: 900;
+  font-size: clamp(0.82rem, 1.8vmin, 1.05rem);
+  color: #facc15;
+  text-shadow:
+    0 0 10px rgba(250, 204, 21, 0.7),
+    0 2px 4px rgba(0, 0, 0, 0.95);
+  animation: floatPointUp 0.55s ease-out forwards;
+
+  &.crit {
+    color: #ef4444;
+    font-size: clamp(0.92rem, 2vmin, 1.18rem);
+    text-shadow:
+      0 0 12px rgba(239, 68, 68, 0.85),
+      0 2px 4px rgba(0, 0, 0, 0.95);
+  }
+}
+
+@keyframes floatPointUp {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(1.08);
+  }
+}
+
+/* ========================================================================== */
+/* INTERACT PLAQUE (CENTER-BOTTOM, SCALES WITH WINDOW)                        */
+/* ========================================================================== */
+.interact-plaque {
+  position: absolute;
+  bottom: clamp(14%, 18vh, 21%);
+  left: 50%;
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: bottom center;
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.92) 0%,
+    rgba(9, 13, 22, 0.95) 100%
+  );
+  border: 1px solid #d4af37;
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.8),
+    inset 0 0 12px rgba(212, 175, 55, 0.14);
+  padding: 7px 18px;
+  border-radius: 4px;
+  text-align: center;
+  min-width: 240px;
+  max-width: 85vw;
+
+  .interact-title {
+    font-family: 'Cinzel', serif;
+    font-weight: 900;
+    font-size: clamp(0.78rem, 1.5vmin, 0.92rem);
+    color: #fef08a;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+  }
+
+  .interact-sub {
+    font-size: clamp(0.68rem, 1.3vmin, 0.8rem);
+    color: #e2e8f0;
+    margin-bottom: 4px;
+  }
+}
+
+/* ========================================================================== */
+/* BOTTOM-LEFT: COD ZOMBIES BLOOD ROUND NUMERAL, PERK SEALS & VITALITY        */
+/* ========================================================================== */
+.hud-bottom-left {
+  position: absolute;
+  bottom: clamp(10px, 2vmin, 20px);
+  left: clamp(12px, 2.2vmin, 22px);
+  transform: scale(var(--hud-scale));
+  transform-origin: bottom left;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.zombies-round-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1;
+
+  .round-caption {
+    font-family: 'Cinzel', serif;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    color: #cbd5e1;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
+    margin-left: 2px;
+  }
+
+  .round-numeral {
+    font-family: 'Cinzel', serif;
+    font-size: 3.35rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    color: #dc2626;
+    text-shadow:
+      0 0 16px rgba(220, 38, 38, 0.85),
+      0 0 30px rgba(153, 27, 27, 0.65),
+      0 4px 8px rgba(0, 0, 0, 0.95);
+    transition: color 0.3s ease, transform 0.3s ease;
+  }
+
+  &.transitioning .round-numeral {
+    animation: chalkRoundFlash 0.8s infinite alternate ease-in-out;
+  }
+}
+
+@keyframes chalkRoundFlash {
+  from {
+    color: #fef08a;
+    text-shadow:
+      0 0 22px rgba(250, 204, 21, 0.95),
+      0 0 36px rgba(220, 38, 38, 0.8);
+    transform: scale(1.06);
+  }
+  to {
+    color: #dc2626;
+    text-shadow:
+      0 0 16px rgba(220, 38, 38, 0.9),
+      0 4px 8px rgba(0, 0, 0, 0.95);
+    transform: scale(1);
+  }
+}
+
+.perks-emblem-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.perk-badge-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  animation: perkDrinkPop 0.35s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.perk-crest-shield {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #d4af37;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .perk-inner-ring {
+    position: absolute;
+    inset: 2.5px;
+    border-radius: 50%;
+    border: 1px solid rgba(250, 204, 21, 0.55);
+    pointer-events: none;
+  }
+
+  .perk-svg-icon {
+    width: 19px;
+    height: 19px;
+    color: #f8fafc;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.95));
+  }
+}
+
+.perk-mini-code {
+  font-family: 'Cinzel', serif;
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+@keyframes perkDrinkPop {
+  from {
+    opacity: 0;
+    transform: scale(0.4) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.vitality-frame {
+  width: 198px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(9, 13, 22, 0.94));
+  border: 1px solid rgba(212, 175, 55, 0.52);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.72);
+  padding: 6px 10px;
+  border-radius: 4px;
+
+  .vitality-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+
+    .vitality-title {
+      font-family: 'Cinzel', serif;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: #d4af37;
+    }
+
+    .vitality-numbers {
+      font-family: 'Cinzel', serif;
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+  }
+}
+
+.medieval-bar-track {
+  width: 100%;
+  height: 8px;
+  background: #060911;
+  border: 1px solid #475569;
+  border-radius: 2px;
+  overflow: hidden;
+
+  &.small {
+    height: 6px;
+  }
+}
+
+.medieval-bar-fill {
+  height: 100%;
+  transition: width 0.15s ease;
+
+  &.health {
+    background: linear-gradient(90deg, #991b1b 0%, #dc2626 50%, #ef4444 100%);
+    box-shadow: 0 0 10px rgba(220, 38, 38, 0.65);
+  }
+
+  &.health.low {
+    background: linear-gradient(90deg, #7f1d1d 0%, #ef4444 100%);
+    animation: blinkRedStatus 0.55s infinite;
+  }
+
+  &.repair {
+    background: linear-gradient(90deg, #b45309 0%, #facc15 100%);
+  }
+}
+
+@keyframes blinkRedStatus {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ========================================================================== */
+/* BOTTOM-RIGHT: KINO DER TOTEN CRIMSON POINTS SMEAR & WEAPON PLAQUE          */
+/* ========================================================================== */
+.hud-bottom-right {
+  position: absolute;
+  bottom: clamp(10px, 2vmin, 20px);
+  right: clamp(12px, 2.2vmin, 22px);
+  transform: scale(var(--hud-scale));
+  transform-origin: bottom right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+/* Exact CoD Zombies Crimson Brushstroke Score Banner */
+.zombies-points-banner {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(127, 29, 29, 0.85) 18%,
+    rgba(185, 28, 28, 0.95) 65%,
+    rgba(153, 27, 27, 0.98) 100%
+  );
+  border-right: 3px solid #facc15;
+  border-top: 1px solid rgba(250, 204, 21, 0.45);
+  border-bottom: 1px solid rgba(250, 204, 21, 0.45);
+  box-shadow: 0 4px 14px rgba(185, 28, 28, 0.5);
+  padding: 4px 15px 4px 24px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .points-crest {
+    color: #facc15;
+    font-size: 1rem;
+    text-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+  }
+
+  .points-value {
+    font-family: 'Cinzel', serif;
+    font-size: 1.32rem;
+    font-weight: 900;
+    color: #fef08a;
+    letter-spacing: 0.05em;
+    text-shadow:
+      0 0 12px rgba(250, 204, 21, 0.55),
+      0 2px 5px rgba(0, 0, 0, 0.95);
+  }
+}
+
+.weapon-plaque {
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.9) 0%,
+    rgba(9, 13, 22, 0.95) 100%
+  );
+  border: 1px solid rgba(212, 175, 55, 0.55);
+  border-right: 3px solid #d4af37;
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.78),
+    inset 0 0 14px rgba(212, 175, 55, 0.1);
+  padding: 9px 15px;
+  border-radius: 4px;
+  text-align: right;
+  min-width: 215px;
+
+  &.upgraded {
+    border-color: #c084fc;
+    border-right-color: #e879f9;
+    box-shadow:
+      0 6px 20px rgba(0, 0, 0, 0.85),
+      0 0 16px rgba(192, 132, 252, 0.35),
+      inset 0 0 16px rgba(192, 132, 252, 0.18);
+  }
+
+  .upgraded-rune-badge {
+    font-family: 'Cinzel', serif;
+    font-size: 0.62rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    color: #e879f9;
+    text-shadow: 0 0 8px rgba(232, 121, 249, 0.7);
+    margin-bottom: 2px;
+  }
+
+  .weapon-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.92rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    color: #f8fafc;
+    text-transform: uppercase;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+  }
+
+  .ammo-counter-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 5px;
+    margin: 2px 0;
+
+    .ammo-mag {
+      font-family: 'Cinzel', serif;
+      font-size: 1.78rem;
+      font-weight: 900;
+      color: #fef08a;
+      line-height: 1.05;
+      text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95);
+
+      &.low {
+        color: #fb923c;
+      }
+
+      &.empty {
+        color: #ef4444;
+        text-shadow: 0 0 12px rgba(239, 68, 68, 0.85);
+      }
+    }
+
+    .ammo-sep {
+      font-family: 'Cinzel', serif;
+      font-size: 1.15rem;
+      color: #64748b;
+    }
+
+    .ammo-reserve {
+      font-family: 'Cinzel', serif;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #cbd5e1;
+
+      &.empty {
+        color: #ef4444;
+      }
+    }
+  }
+
+  .weapon-no-ammo-tag {
+    font-family: 'Cinzel', serif;
+    font-size: 0.74rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    color: #ef4444;
+    text-shadow: 0 0 10px rgba(239, 68, 68, 0.9);
+    margin-bottom: 3px;
+    animation: blinkRedStatus 0.65s infinite ease-in-out;
+  }
+
+  .controls-hint {
+    font-size: 0.62rem;
+    color: #94a3b8;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    padding-top: 4px;
+    margin-top: 3px;
+  }
+}
+
+/* ========================================================================== */
+/* MEDIEVAL FANTASY MODALS (START, PAUSE, GAME OVER — RESPONSIVE)             */
+/* ========================================================================== */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at center,
+    rgba(15, 23, 42, 0.84) 0%,
+    rgba(4, 7, 15, 0.94) 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  padding: 12px;
+}
+
+.medieval-modal {
+  max-width: 460px;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  transform: scale(var(--hud-scale));
+  transform-origin: center center;
+  background: linear-gradient(180deg, #131c2e 0%, #090d16 100%);
+  border: 1px solid #d4af37;
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.9),
+    inset 0 0 24px rgba(212, 175, 55, 0.12);
+  border-radius: 5px;
+  padding: clamp(16px, 3vmin, 26px);
+  text-align: center;
+
+  &.small {
+    max-width: 370px;
+  }
+
+  &.game-over {
+    border-color: #dc2626;
+    box-shadow:
+      0 20px 50px rgba(0, 0, 0, 0.95),
+      inset 0 0 28px rgba(220, 38, 38, 0.22);
+
+    .modal-rune-crown {
+      color: #ef4444;
+    }
+  }
+
+  .modal-rune-crown {
+    font-family: 'Cinzel', serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    color: #d4af37;
+    margin-bottom: 5px;
+  }
+
+  h1, h2 {
+    font-family: 'Cinzel', serif;
+    font-size: clamp(1.25rem, 3vmin, 1.55rem);
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    color: #f8fafc;
+    margin: 0 0 5px;
+  }
+
+  .subtitle {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    margin-bottom: 16px;
+  }
+}
+
+.controls-list {
+  background: rgba(6, 9, 17, 0.85);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  text-align: left;
+
+  div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+    padding-bottom: 4px;
+    gap: 8px;
+
+    &:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    strong {
+      font-family: 'Cinzel', serif;
+      color: #fef08a;
+      font-size: 0.76rem;
+    }
+
+    span {
+      color: #cbd5e1;
+      text-align: right;
+    }
+  }
+}
+
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.medieval-btn {
+  width: 100%;
+  padding: 10px 16px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #f8fafc;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: #d4af37;
+    color: #fef08a;
+    background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+  }
+
+  &.primary {
+    background: linear-gradient(180deg, #991b1b 0%, #7f1d1d 100%);
+    border-color: #d4af37;
+    color: #fef08a;
+    box-shadow: 0 4px 15px rgba(185, 28, 28, 0.5);
+
+    &:hover {
+      background: linear-gradient(180deg, #b91c1c 0%, #991b1b 100%);
+      box-shadow: 0 6px 20px rgba(220, 38, 38, 0.7);
+    }
+  }
+}
+
+.stats-list {
+  background: rgba(6, 9, 17, 0.85);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 0.84rem;
+
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    span {
+      color: #cbd5e1;
+    }
+
+    strong {
+      font-family: 'Cinzel', serif;
+      color: #fef08a;
+      font-size: 0.95rem;
+    }
+  }
+}
+
+/* ========================================================================== */
+/* DEVELOPER SETTINGS BOX (CUSTOM STARTING ROUND)                             */
+/* ========================================================================== */
+.dev-settings-box {
+  background: rgba(9, 13, 22, 0.92);
+  border: 1px dashed rgba(212, 175, 55, 0.55);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+
+  .dev-header {
+    font-family: 'Cinzel', serif;
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    color: #38bdf8;
+    text-align: center;
+  }
+
+  .dev-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+    color: #e2e8f0;
+  }
+
+  .dev-round-stepper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .step-btn {
+      width: 28px;
+      height: 28px;
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 3px;
+      color: #fef08a;
+      font-weight: 900;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover {
+        border-color: #d4af37;
+        background: #334155;
+      }
+    }
+
+    .dev-round-input {
+      width: 54px;
+      height: 28px;
+      background: #060911;
+      border: 1px solid #d4af37;
+      border-radius: 3px;
+      color: #fef08a;
+      font-family: 'Cinzel', serif;
+      font-weight: 900;
+      font-size: 0.92rem;
+      text-align: center;
+    }
+  }
+
+  .dev-presets {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    flex-wrap: wrap;
+
+    .preset-chip {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 3px;
+      color: #cbd5e1;
+      font-family: 'Cinzel', serif;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      cursor: pointer;
+
+      &:hover {
+        border-color: #d4af37;
+        color: #fef08a;
+      }
+
+      &.active {
+        background: #7f1d1d;
+        border-color: #facc15;
+        color: #fef08a;
+      }
+    }
+  }
+
+  .dev-bonus-toggle {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid #475569;
+    border-radius: 3px;
+    padding: 5px 8px;
+    font-size: 0.74rem;
+    color: #cbd5e1;
+    cursor: pointer;
+    text-align: center;
+
+    strong {
+      color: #94a3b8;
+    }
+
+    &.enabled {
+      border-color: rgba(34, 197, 94, 0.6);
+
+      strong {
+        color: #4ade80;
+      }
+    }
+  }
+}
+
+/* ========================================================================== */
+/* TOP-LEFT ROOM & ELEVATION PLAQUE + COD ZOMBIES TACTICAL MAP OVERLAY        */
+/* ========================================================================== */
+.hud-top-left {
+  position: absolute;
+  top: clamp(6px, 1.3vmin, 14px);
+  left: clamp(8px, 1.6vmin, 18px);
+  transform: scale(var(--hud-scale));
+  transform-origin: top left;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 20;
+}
+
+.location-plaque {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(9, 13, 22, 0.94) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.55);
+  border-left: 3px solid #d4af37;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75);
+  padding: 5px 12px;
+  border-radius: 3px;
+
+  .location-room {
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    font-weight: 900;
+    color: #fef08a;
+    letter-spacing: 0.05em;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95);
+  }
+
+  .location-floor {
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: #38bdf8;
+    letter-spacing: 0.04em;
+    margin-top: 1px;
+  }
+}
+
+.map-key-hint {
+  background: rgba(9, 13, 22, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 0.64rem;
+  color: #cbd5e1;
+  width: fit-content;
+
+  span {
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    color: #facc15;
+  }
+
+  &.active {
+    border-color: #facc15;
+    color: #fef08a;
+  }
+}
+
+.tactical-map-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 7, 15, 0.82);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 35;
+  padding: 16px;
+}
+
+.tactical-map-card {
+  width: min(860px, 94vw);
+  max-height: 90vh;
+  background: linear-gradient(180deg, #111827 0%, #090d16 100%);
+  border: 1px solid #d4af37;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.95),
+    inset 0 0 24px rgba(212, 175, 55, 0.14);
+  border-radius: 6px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transform: scale(var(--hud-scale));
+  transform-origin: center center;
+}
+
+.tactical-map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+  padding-bottom: 8px;
+
+  .map-kicker {
+    font-family: 'Cinzel', serif;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: #d4af37;
+  }
+
+  h3 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.05rem;
+    font-weight: 900;
+    color: #f8fafc;
+    margin: 2px 0 0;
+
+    span {
+      color: #38bdf8;
+      font-size: 0.86rem;
+    }
+  }
+
+  .map-close-hint {
+    font-size: 0.74rem;
+    color: #94a3b8;
+
+    strong {
+      color: #fef08a;
+    }
+  }
+}
+
+.tactical-map-body {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.moria-blueprint-svg {
+  width: 100%;
+  max-height: 66vh;
+  background: radial-gradient(circle at center, #0f172a 0%, #050811 100%);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+
+  .room-box {
+    fill: rgba(30, 41, 59, 0.45);
+    stroke: #475569;
+    stroke-width: 0.6;
+    stroke-dasharray: 1.5 1;
+
+    &.unlocked {
+      fill: rgba(30, 41, 59, 0.88);
+      stroke: #cbd5e1;
+      stroke-dasharray: none;
+    }
+
+    &.upper-wing.unlocked {
+      fill: rgba(49, 46, 129, 0.55);
+      stroke: #fbbf24;
+    }
+
+    &.deep-wing.unlocked {
+      fill: rgba(12, 74, 110, 0.55);
+      stroke: #38bdf8;
+    }
+
+    &.sanctum-wing.unlocked {
+      stroke: #f97316;
+    }
+  }
+
+  .room-terrace {
+    &.upper {
+      fill: rgba(217, 119, 6, 0.25);
+      stroke: #f59e0b;
+      stroke-width: 0.45;
+    }
+
+    &.mid {
+      fill: rgba(56, 189, 248, 0.2);
+      stroke: #38bdf8;
+      stroke-width: 0.45;
+    }
+  }
+
+  .stair-corridor {
+    stroke: #94a3b8;
+    stroke-width: 0.45;
+  }
+
+  .map-obstacle {
+    fill: #334155;
+    stroke: #94a3b8;
+    stroke-width: 0.35;
+  }
+
+  .room-title {
+    font-family: 'Cinzel', serif;
+    font-size: 2.3px;
+    font-weight: 900;
+    fill: #f8fafc;
+    text-anchor: middle;
+  }
+
+  .room-elev {
+    font-size: 1.85px;
+    fill: #38bdf8;
+    text-anchor: middle;
+  }
+
+  .room-title-sm {
+    font-family: 'Cinzel', serif;
+    font-size: 1.9px;
+    font-weight: 900;
+    fill: #fef08a;
+    text-anchor: middle;
+  }
+
+  .room-elev-sm {
+    font-size: 1.65px;
+    fill: #cbd5e1;
+    text-anchor: middle;
+  }
+
+  .stair-label {
+    font-size: 1.7px;
+    font-weight: 700;
+    fill: #fef08a;
+    text-anchor: middle;
+  }
+
+  .door-marker {
+    rect {
+      fill: #dc2626;
+      stroke: #fef08a;
+      stroke-width: 0.35;
+    }
+    text {
+      font-family: 'Cinzel', serif;
+      font-size: 2.1px;
+      font-weight: 900;
+      fill: #fca5a5;
+      text-anchor: middle;
+    }
+
+    &.open {
+      rect {
+        fill: rgba(34, 197, 94, 0.45);
+        stroke: #4ade80;
+        stroke-dasharray: 0.8 0.6;
+      }
+      text {
+        fill: #4ade80;
+      }
+    }
+  }
+
+  .icon-txt {
+    font-family: 'Cinzel', serif;
+    font-size: 1.55px;
+    font-weight: 900;
+    fill: #ffffff;
+    text-anchor: middle;
+
+    &.dark {
+      fill: #090d16;
+    }
+  }
+}
+
+.tactical-map-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.74rem;
+
+  .legend-section {
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(212, 175, 55, 0.28);
+    border-radius: 4px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .legend-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    color: #d4af37;
+    margin-bottom: 2px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #e2e8f0;
+  }
+
+  .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    font-weight: 900;
+
+    &.player {
+      background: #facc15;
+      border: 1px solid #fff;
+      border-radius: 50%;
+    }
+    &.door-locked {
+      background: #dc2626;
+      border: 1px solid #fef08a;
+    }
+    &.door-open {
+      background: rgba(34, 197, 94, 0.5);
+      border: 1px dashed #4ade80;
+    }
+    &.stairs {
+      background: repeating-linear-gradient(
+        0deg,
+        #334155,
+        #334155 2px,
+        #94a3b8 2px,
+        #94a3b8 4px
+      );
+      border: 1px solid #fbbf24;
+    }
+    &.wallbuy {
+      background: #38bdf8;
+    }
+    &.box {
+      background: #facc15;
+      color: #090d16;
+    }
+    &.pap {
+      background: #c084fc;
+      color: #fff;
+    }
+  }
+
+  .perk-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cinzel', serif;
+    font-size: 0.56rem;
+    font-weight: 900;
+    color: #fff;
+    border: 1px solid #fff;
+
+    &.jg {
+      background: #ef4444;
+    }
+    &.st {
+      background: #eab308;
+    }
+    &.sc {
+      background: #22c55e;
+    }
+    &.dt {
+      background: #f97316;
+    }
+  }
+
+  .floor-pill {
+    font-size: 0.7rem;
+    color: #cbd5e1;
+    display: flex;
+    gap: 6px;
+
+    strong {
+      font-family: monospace;
+      color: #38bdf8;
+      min-width: 42px;
+    }
+  }
+}
+
+
